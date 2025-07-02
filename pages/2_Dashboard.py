@@ -30,6 +30,9 @@ def wide_space_default():
 # Set wide as the default layout
 # wide_space_default()
 
+st.title("📈 Dashboard")
+    
+
 # Load external CSS
 CSS_PATH = os.path.join("assets/styles.css")
 load_css(CSS_PATH)

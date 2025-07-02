@@ -19,7 +19,8 @@ def load_css(file_path):
                 </style>""")
 
 def wide_space_default():
-    st.set_page_config(layout="wide")
+    st.set_page_config(layout="wide",page_icon="assets/icon.png")
+    
 
 wide_space_default()
         

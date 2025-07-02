@@ -1,0 +1,16 @@
+# ignore sandbox
+sandbox_experimentation/
+
+# ignore data
+data/
+
+# ignore output
+output/
+
+# ignore python byte code
+__pycache__/
+*.pyc
+
+# ignore virtual environemnts
+venv/
+env/

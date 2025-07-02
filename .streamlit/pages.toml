@@ -1,0 +1,12 @@
+[main]
+path = "AGS_Application.py"
+name = "AGS Excel File Extraction"
+icon = "📁"
+
+[[pages]]
+path = "pages/2_Dashboard.py"
+name = "Dashboardadsads"
+icon = "🏠"
+
+
+

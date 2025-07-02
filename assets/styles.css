@@ -1,0 +1,105 @@
+body {
+    background-color: white !important;
+}
+
+/* 🔲 Streamlit’s internal view container */
+[data-testid="stAppViewContainer"] {
+    background-color: #f0eeea !important;
+}
+
+.st-key-Contractor-Selection div:first-child{
+    color: black;
+}
+
+
+.st-key-Custom-SelectBox-Selection div:first-child{
+    color: black;
+}
+
+
+.st-key-SPTN-Selection div:first-child{
+    color: black;
+}
+
+/* Dropdown menu */
+div[data-baseweb="select"] > div {
+    background-color: white !important;
+    color: white !important;
+
+}
+
+div[data-baseweb="select"] svg {
+    fill: black !important;
+}
+
+.black-text {
+    color: black;
+    font-size: 16px;
+}
+
+h1 {
+    color: black !important;
+}
+
+h3 {
+    color: black !important;
+}
+
+/* File uploader background */
+div[data-testid="stFileUploader"] {
+    background-color: #f0eeea !important;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid black;
+    color: black !important;
+}
+
+
+div[data-testid="stFileUploader"] label {
+    color: black !important;
+
+}
+
+/* Target spinner label text */
+div[data-testid="stSpinner"] > div {
+    color: red !important;
+    font-weight: bold;
+}
+
+.custom-table {
+    color: black;
+    font-size: 16px;
+    border-collapse: separate; /* Important for border-radius to work */
+    border-spacing: 0;
+    width: 100%;
+    border: 1px solid black;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px black; /* fallback outline */
+}
+
+.custom-table th,
+.custom-table td {
+    border: 1px solid black;
+    padding: 10px;
+    text-align: left;
+}
+
+/* Optional zebra striping */
+.custom-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* Make only the outer corners rounded */
+.custom-table tr:first-child th:first-child {
+    border-top-left-radius: 12px solid black;
+}
+.custom-table tr:first-child th:last-child {
+    border-top-right-radius: 12px solid black;
+}
+.custom-table tr:last-child td:first-child {
+    border-bottom-left-radius: 12px solid black;
+}
+.custom-table tr:last-child td:last-child {
+    border-bottom-right-radius: 12px solid black;
+}

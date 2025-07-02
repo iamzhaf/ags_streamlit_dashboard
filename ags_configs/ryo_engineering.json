@@ -1,0 +1,32 @@
+{
+    "_meta": {
+                "contractor":"RYOBI ENGINEERING PTE LTD",
+                "uen": "200700341H"
+    },
+    "sections": {
+            "Project_Borehole_Information": {
+                "skiprows": 0,
+                "columns_section": "A:B"
+            },
+
+            "SPT": {
+            "skiprows": 2,
+            "columns_section": "C,D,K:V"
+            },
+
+            "Soil_Layer_Stratum_Data": {
+                "skiprows": 2,
+                "columns_section": "AH:AT"
+            },
+
+            "Soil_Lab_Test": {
+                "skiprows": 2,
+                "columns_section": "BG:BM"
+            },
+
+            "Soil_Triaxial_Test": {
+                "skiprows": 2,
+                "columns_section": "BU:BX"
+            }
+    }
+}

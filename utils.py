@@ -12,10 +12,10 @@ from reportlab.lib.units import inch
 from PIL import Image
 
 
-# Load contractor config reference json file
-AGS_CONFIG_ROOT_PATH = r"C:\Users\Zhafran\OneDrive\01 Work\02 Current Work\TERS Consultant\Projects\Soil_Data_Insights_Dashboard\ags_streamlit_dashboard\ags_configs"
-with open(os.path.join(AGS_CONFIG_ROOT_PATH,"ryo_engineering.json"),"r") as file:
-    RYO_AGS_CONFIG = json.load(file)
+# # Load contractor config reference json file
+# AGS_CONFIG_ROOT_PATH = r"C:\Users\Zhafran\OneDrive\01 Work\02 Current Work\TERS Consultant\Projects\Soil_Data_Insights_Dashboard\ags_streamlit_dashboard\ags_configs"
+# with open(os.path.join(AGS_CONFIG_ROOT_PATH,"ryo_engineering.json"),"r") as file:
+#     RYO_AGS_CONFIG = json.load(file)
 
 
 class AGSColumnCleaner:

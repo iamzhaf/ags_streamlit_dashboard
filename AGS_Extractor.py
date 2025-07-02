@@ -4,7 +4,7 @@ import pandas as pd
 import traceback
 from streamlit_option_menu import option_menu
 from st_pages import _get_pages_from_config
-from utils import RYO_AGS_CONFIG
+# from utils import RYO_AGS_CONFIG
 from utils import get_valid_borehole_sheets, extract_borehole_number
 from utils import get_contrator_config_reference_json_file as get_contract_config
 import importlib
@@ -119,6 +119,7 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
 
 # Add "Run AGS Extraction" button for user to execute the AGS data transformation pipeline
 if "validity" in st.session_state and st.session_state["validity"] == True:
+    
     # Only executes the AGS extraction when "Run AGS Extraction" button is clicked
     if st.button("Run AGS Extraction", key="run_extraction"):
 
@@ -130,18 +131,6 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
         # Dynamically import the module and class
         module = importlib.import_module(f"ags_transformers.{contractor_slug}")
         TransformerClass = getattr(module, transformer_name)
-
-        # Instantiate and run
-        # transformer = TransformerClass(file=uploaded_file, sheet_name=st.session_state["validated_sheet_names"][0], config=st.session_state["validated_contractor_config"])
-        # transformer.transform()
-        # # st.write(transformer.soil_layer_df_transformed)
-        # # st.write(transformer.mapped_spt_soil_df_transformed)
-        # # st.write(transformer.lab_test_df_transformed)
-        # # st.write(transformer.triaxial_test_df_transformed)
-        # # st.write(transformer.combined_lab_triaxial_test_transformed_df)
-        # # st.write(transformer.mapped_specimen_spt_final_transformed_df)
-        # if transformer.result and transformer.result["transformation_result"]:
-        #     st.write(transformer.result["final_view_df"])
 
         st.session_state["final_view_dict"] = {}  # reset
         st.session_state["transformation_result"] = {} # reset

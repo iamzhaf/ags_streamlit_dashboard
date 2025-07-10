@@ -1,0 +1,55 @@
+{
+    "_meta": {
+                "name":"AGS-SG BCA Template"
+    },
+    "sections": {
+            "PROJ": {
+                "skiprows": 0,
+                "columns_section": "",
+                "columns":[
+                                "PROJ_ID","HOLE_ID","BTVT_TREF",
+                                "BTVT_DPTH","BTVT_DD","BTVT_DA","BTVT_APTR",
+                                "BTVT_RGHN","BTVT_JCDN","BTVT_REM"
+                        ]
+            },
+
+            "HOLE": {
+            "skiprows": 0,
+            "columns_section": "",
+            "columns":[
+                                "PROJ_ID","HOLE_ID","HOLE_TYPE","HOLE_NATE",
+                                "HOLE_NATN","HOLE_GL"
+                        ]
+
+            },
+
+            "ISPT": {
+                "skiprows": 0,
+                "columns_section": "",
+                "columns":[
+                                "PROJ_ID","HOLE_ID","ISPT_TOP","ISPT_SEAT",
+                                "ISPT_MAIN","ISPT_NPEN","ISPT_NVAL","ISPT_TYPE","ISPT_CAS",
+                                "ISPT_REM"
+                        ]
+            },
+
+            "GEOL": {
+                "skiprows": 0,
+                "columns_section": "",
+                "columns":[
+                                "PROJ_ID","HOLE_ID","GEOL_TOP","GEOL_BASE",
+                                "GEOL_DESC","GEOL_LEG","GEOL_CODE","GEOL_GEO3","GEOL_STAT"
+                        ]
+            },
+
+            "SAMP": {
+                "skiprows": 0,
+                "columns_section": "",
+                 "columns":[
+                                "PROJ_ID","HOLE_ID","GEOL_STAT","SAMP_TOP","SAMP_BASE",
+                                "SAMP_DIA","SAMP_TYPE","SAMP_DESC","SAMP_DATE","SAMP_TIME",
+                                "SAMP_WDEP","SAMP_TEMP","SAMP_BAR","SAMP_PRES","SAMP_FLOW"
+                        ]
+            }
+    }
+}

@@ -8,6 +8,21 @@ from utils import long_to_wide
 from utils import spt_n_groupings
 
 class AGSSgTransformer(BaseTransformer):
+    """
+    This class helps turn messy soil investigation data from Excel files into neat, organized tables.
+    It takes information about boreholes, soil layers, and test results, and matches them up so it's easy to study and use later.
+
+    Key functions:
+    - Loads and cleans Excel data about soil and boreholes.
+    - Matches up soil layers, boreholes, and test results so they line up correctly.
+    - Organizes everything into easy-to-use tables for analysis.
+    - Makes it much simpler for engineers and scientists to work with complicated soil data.
+
+    Parameters:
+    file: The Excel file with the soil investigation data.
+    sheet_name: The list of sheet names in the Excel file.
+    config: A dictionary with settings that tell the class how to process the data.
+    """
     def __init__(self, file, sheet_name, config):
         super().__init__(file, sheet_name, config)
         self.transformed_dfs = {}

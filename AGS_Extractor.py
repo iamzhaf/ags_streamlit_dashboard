@@ -4,11 +4,14 @@ import pandas as pd
 import traceback
 from streamlit_option_menu import option_menu
 from st_pages import _get_pages_from_config
-# from utils import RYO_AGS_CONFIG
+from utils import find_table_indices
 from utils import get_valid_borehole_sheets, extract_borehole_number
 from utils import get_contrator_config_reference_json_file as get_contract_config
 import importlib
 from ags_transformers.ryo_engineering import RyoEngineeringTransformer
+from ags_transformers.ags_sg import AGSSgTransformer
+import json
+from utils import map_soil_layer_to_spt
 
 borehole_html_table = None
 
@@ -27,8 +30,14 @@ wide_space_default()
 
 @st.cache_data
 def create_valid_borehole_list_df(sheet_names):
-    borehole_sheets_list_df = pd.DataFrame({"#":[*range(1,len(valid_sheets)+1)],"Borehole Data Sheetnames":[i for i in valid_sheets]})
+    borehole_sheets_list_df = pd.DataFrame({"#":[*range(1,len(valid_borehole_sheets)+1)],"Borehole Data Sheetnames":[i for i in valid_sheets]})
     return borehole_sheets_list_df
+
+
+@st.cache_data
+def create_valid_ags_file_list_df(file):
+    ags_file_list_df = pd.DataFrame({"#":[*range(1,len(file)+1)],"AGS File Name":[i for i in file]})
+    return ags_file_list_df
 
 # Load external CSS
 CSS_PATH = os.path.join("assets/styles.css")
@@ -37,6 +46,7 @@ load_css(CSS_PATH)
 pages = _get_pages_from_config()
 
 contractor_map = {
+    "AGS(SG) Standard": ("ags_sg","AGSStandardTransformer"),
     "Ryo Engineering": ("ryo_engineering","RyoEngineeringTransformer"),
     "SI Contractor B": ("contractor_b",None),
     "SI Contractor C": ("contractor_c",None)
@@ -44,78 +54,152 @@ contractor_map = {
 
 st.title("⚙️ AGS Excel File Data Extractor")
 
-uploaded_file = st.file_uploader("Upload AGS Excel file (.xlsx)", type=["xlsx"],key="ags-uploader")
+uploaded_files = st.file_uploader("Upload AGS Excel file (.xlsx)", type=["xlsx","xls"],key="ags-uploader",accept_multiple_files=True)
 
-contractor_selected = st.selectbox("Choose the SI Contractor who provided the AGS file", [*contractor_map.keys()], 
+# Initialize session state to track uploaded filenames
+if "ags_uploaded_files" not in st.session_state:
+    st.session_state["ags_uploaded_files"] = []
+
+
+# Convert to set for comparison
+prev_filenames = set(st.session_state["ags_uploaded_files"])
+current_filenames = set(f.name for f in uploaded_files) if uploaded_files else set()
+
+# Detect new files or changes in upload
+new_files_uploaded = current_filenames != prev_filenames
+
+contractor_selected = st.selectbox("Choose the provider of AGS file", [*contractor_map.keys()], 
                                                                                           key="Contractor-Selection")
 
 # Detect when user clears file upload
-if uploaded_file is None and "ags_excel" in st.session_state:
-    st.session_state.pop("ags_excel")
+if uploaded_files is None and "ags_excel_filenames" in st.session_state and new_files_uploaded:
+    st.session_state.pop("ags_excel_filenames")
     st.session_state.pop("validity", None)
     st.session_state.pop("validated_sheet_names", None)
     st.session_state.pop("validated_contractor_config",None)
+    st.session_state.pop("ags_excel_filenames", None)
+    st.session_state.pop("ags_sg_file", None)
 
 
 # Detect file name change or first upload
-if uploaded_file:
-    # Check if we already have a file and if it's the same
-    prev_file = st.session_state.get("ags_excel")
-    new_file_uploaded = (
-        prev_file is None or uploaded_file.name != prev_file.name
-    )
+if uploaded_files:
 
-    if new_file_uploaded:
-        st.session_state["ags_excel"] = uploaded_file
+    if new_files_uploaded:
+        st.session_state["ags_uploaded_files"] = list(current_filenames)  # update the session state
 
-        # Read Excel
-        excel = pd.ExcelFile(uploaded_file)
-        sheet_names = excel.sheet_names
+        if contractor_selected == "AGS(SG) Standard":
+            st.session_state["ags_excel_filenames"] = {}
+            # Process each file
 
-        # Load contractor config
-        contractor_config = get_contract_config(contractor_selected)
-        section_config = contractor_config["sections"]["Project_Borehole_Information"]
+            # Load AGS-SG config to get required sheets
+            with open("ags_configs/ags_sg.json", "r") as f:
+                ags_sg_config = json.load(f)
+                config = ags_sg_config["sections"]
 
-        with st.spinner("Identifying valid borehole data sheets..."):
-            valid_sheets = get_valid_borehole_sheets(
-                ags_excel_file=uploaded_file,
-                all_sheet_names=sheet_names,
-                config=section_config,
-                extract_borehole_number_fn=extract_borehole_number,
-                verbose=True
-            )
+            for file in uploaded_files:
+                # Read Excel
+                excel = pd.ExcelFile(file)
+                sheet_names = excel.sheet_names
+                # Check if uploaded file is a AGS(SG) file
+                # Get only sections where required is True
+                required_sheets = [sheet for sheet, c in config.items() 
+                                if c.get("required", "False") == "True"]
+                all_sheets = [sheet for sheet, c in config.items() ]
+                
+                # Check if any sheet contains section in ags_sg
+                ags_valid_sheets = any(any(pattern in sheet.strip().upper()[:4] for pattern in required_sheets) for sheet in sheet_names)
+            
+                sheet_to_processed =  [sheet for sheet in sheet_names if sheet.strip().upper()[:4] in all_sheets]
 
-        # Store results
-        st.session_state["validity"] = bool(valid_sheets)
-        st.session_state["validated_sheet_names"] = valid_sheets if valid_sheets else None
-        st.session_state["validated_contractor_config"] = contractor_config
-        st.session_state["validated_contractor"] = contractor_selected
+                if ags_valid_sheets:
+                    st.session_state["ags_excel_filenames"][file.name] = sheet_to_processed
+                    # st.success("✅ Uploaded File is a valid AGS(SG) File"
 
-        if not valid_sheets:
-            st.warning("⚠️ No borehole records found in the AGS file.")
+            if st.session_state["ags_excel_filenames"]:
+                st.session_state["validity"] = True
+                st.session_state["ags_sg_file"] = True
+            else:
+                st.warning("⚠️ No valid AGS file found.")
+                st.session_state["validity"] = False
+                st.session_state["ags_sg_file"] = False
+
+        if contractor_selected != "AGS(SG) Standard":
+            st.session_state["ags_excel_filenames"] = {}
+
+            # Load contractor config
+            contractor_config = get_contract_config(contractor_selected)
+            section_config = contractor_config["sections"]["Project_Borehole_Information"]
+
+            with st.spinner("Identifying valid borehole data sheets...for {contractor_selected}"):
+
+                for file in uploaded_files:
+                    valid_borehole_sheets = get_valid_borehole_sheets(
+                        ags_excel_file=file,
+                        all_sheet_names=sheet_names,
+                        config=section_config,
+                        extract_borehole_number_fn=extract_borehole_number,
+                        verbose=True
+                    )
+
+                    # Store results
+                    if valid_borehole_sheets:
+                        st.session_state["ags_excel_filenames"][file.name] = valid_borehole_sheets
+                        st.session_state["valid_files"].append(file)
+
+            if st.session_state["ags_excel_filenames"]:
+                st.session_state["validity"] = True
+                st.session_state["validated_contractor_config"] = contractor_config
+                st.session_state["validated_contractor"] = contractor_selected
+            else:
+                st.warning("⚠️ No valid AGS file found.")
+                st.session_state["validity"] = False
+                st.session_state["validated_contractor_config"] = None
+                st.session_state["validated_contractor"] = None
+                st.session_state["ags_sg_file"] = False
 
 
-if "validity" in st.session_state and st.session_state["validity"] == False and not new_file_uploaded:
-    st.warning("⚠️ No borehole records found in the AGS file.")
 
+if "validity" in st.session_state and st.session_state["validity"] == False and not new_files_uploaded:
+    st.warning("⚠️ No valid AGS file found.")
 
-if "validity" in st.session_state and st.session_state["validity"] == True:
-    st.success("Successfully identified borehole data sheets!")
+# if ("validity" in st.session_state and st.session_state["validity"] == True) and ("ags_sg_file" in st.session_state and st.session_state["ags_sg_file"] == False):
+#     st.success("Successfully identified borehole data sheets!")
+#     st.markdown("<hr style='border: 2px solid black; margin: 20px 0;>", unsafe_allow_html=True)
+#     st.subheader("✅ Valid AGS File to be transformed")
+#     filenames = [k for k,_ in st.session_state["ags_excel_filenames"].items()]
+#     borehole_sheets_list_df = create_valid_ags_file_list_df(filenames)
+
+#     # Convert to HTML with custom CSS class
+#     borehole_html_table = borehole_sheets_list_df.to_html(index=False, classes="custom-table")
+
+#     # Add text to inform user to review the list of identified valid boreholes before proceeding with data extraction and transformation
+#     # st.write(f"Please review the below list of the identified valid boreholes data sheet(s) in upload AGS File ({uploaded_filename})")
+#     st.markdown(f"""<p class="black-text">
+#                     ⚠️ Please review the below list of the identified valid boreholes data sheet(s) in the uploaded AGS File ({st.session_state["ags_excel"].name})
+#                 </p>""", unsafe_allow_html=True)
+
+#     # Render the HTML table
+#     st.markdown(borehole_html_table, unsafe_allow_html=True)
+
+# AGS(SG) File
+if ("validity" in st.session_state and st.session_state["validity"] == True):
+    st.success("Successfully identified AGS(SG) files")
     st.markdown("<hr style='border: 2px solid black; margin: 20px 0;>", unsafe_allow_html=True)
-    st.subheader("✅ Valid Boreholes Records to be Transformed")
-    borehole_sheets_list_df = create_valid_borehole_list_df(st.session_state["validated_sheet_names"])
+    st.subheader("✅ Valid AGS File(s) to be Transformed")
+    filenames = [k for k,_ in st.session_state["ags_excel_filenames"].items()]
+    ags_file_list_df = create_valid_ags_file_list_df(filenames)
 
     # Convert to HTML with custom CSS class
-    borehole_html_table = borehole_sheets_list_df.to_html(index=False, classes="custom-table")
+    ags_sg_html_table = ags_file_list_df.to_html(index=False, classes="custom-table")
 
     # Add text to inform user to review the list of identified valid boreholes before proceeding with data extraction and transformation
     # st.write(f"Please review the below list of the identified valid boreholes data sheet(s) in upload AGS File ({uploaded_filename})")
     st.markdown(f"""<p class="black-text">
-                    ⚠️ Please review the below list of the identified valid boreholes data sheet(s) in the uploaded AGS File ({st.session_state["ags_excel"].name})
+                    ⚠️ Please review the below list of the AGS File(s) to be transformed
                 </p>""", unsafe_allow_html=True)
 
     # Render the HTML table
-    st.markdown(borehole_html_table, unsafe_allow_html=True)
+    st.markdown(ags_sg_html_table, unsafe_allow_html=True)
 
 
 # Add "Run AGS Extraction" button for user to execute the AGS data transformation pipeline
@@ -127,62 +211,155 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
         st.info("AGS Extraction Started. ⚠️ Do Not Refresh Browser")
         # st.write(f"Fetcing SPT Details: {st.session_state["validated_contractor_config"]["sections"]["SPT"]}")
 
-        contractor_slug,transformer_name = contractor_map[st.session_state["validated_contractor"]]
+        if "ags_sg_file" in st.session_state and st.session_state["ags_sg_file"] == True:
 
-        # Dynamically import the module and class
-        module = importlib.import_module(f"ags_transformers.{contractor_slug}")
-        TransformerClass = getattr(module, transformer_name)
+            # Load AGS-SG config to get required sheets
+            with open("ags_configs/ags_sg.json", "r") as f:
+                ags_sg_config = json.load(f)
 
-        st.session_state["final_view_dict"] = {}  # reset
-        st.session_state["transformation_result"] = {} # reset
+            st.write(st.session_state["ags_excel_filenames"])
 
-        for sheet_name in st.session_state["validated_sheet_names"][:]:
-            st.write(f"Processing: {sheet_name}")
+            raw_ags_files = [k for k,_ in st.session_state["ags_excel_filenames"].items()]   
+
+            # raw_ags_files contains just the filenames (strings)
+            for file_name in raw_ags_files:
+
+                sheet_names = st.session_state["ags_excel_filenames"][file_name]
+
+                st.write(f"📄 Processing: {file_name}")
+                
+                # Find the matching UploadedFile object
+                file_obj = next((f for f in uploaded_files if f.name == file_name), None)
+
+                if file_obj is not None:
+
+                    # transformed_dfs = {}
+
+                    # columns_mapping = {'geol_top':'start_depth_of_soil_layer_m','geol_base':'end_depth_of_soil_layer_m',
+                    #             'geol_desc':'soil_description_borelog_soil_name',
+                    #             'geol_geol':'geological_classification',
+                    #             'ispt_top':'depth_to_top_of_test'}
+                    
+                    # for s in ["HOLE","ISPT","GEOL"]:
+                    #     st.write(s)
+                    #     # Read the Excel file
+                    #     df = pd.read_excel(
+                    #         file_obj,
+                    #         sheet_name=sheet_names[cleaned_sheet_names.index(s)],
+                    #         skiprows=0
+                    #     )
+
+                    #     start_row, end_row, start_col, end_col = find_table_indices(df,"HOLE_ID","STOP")
+
+                    #     st.write(start_row, end_row, start_col, end_col)
+
+                    #     columns = df.iloc[6, :end_col]
+
+                    #     transformed_df = df.iloc[start_row+1:end_row, start_col:end_col].dropna(how="all")
+                    #     transformed_df.columns = [c.strip().lower() for c in columns]
+                    #     transformed_df["hole_id"] = transformed_df["hole_id"].str.strip()
+                    #     transformed_dfs[s] = transformed_df
+
+                    # boreholes_df = {}
+                    # for borehole in transformed_dfs["HOLE"]["hole_id"].unique():
+                    #     df_spt = transformed_dfs["ISPT"][transformed_dfs["ISPT"]["hole_id"] == borehole]
+                    #     df_soil = transformed_dfs["GEOL"][transformed_dfs["GEOL"]["hole_id"] == borehole]
+                    #     df_spt["spt_no"] =  ["spt_" + str(i).zfill(3) for i in range(1, len(df_spt) + 1)]
+                    #     cols_to_fill_zeros = ["ispt_inc3","ispt_inc4","ispt_inc5","ispt_inc6","ispt_pen3","ispt_pen4","ispt_pen5","ispt_pen6"]
+                    #     df_spt[cols_to_fill_zeros] = df_spt[cols_to_fill_zeros].fillna(0)
+                    #     df_spt["spt_n"] = df_spt["ispt_inc3"].astype(int) + df_spt["ispt_inc4"].astype(int) + df_spt["ispt_inc5"].astype(int) + df_spt["ispt_inc6"].astype(int)
+                    #     df_spt["penetration_mm"] = df_spt["ispt_pen3"].astype(int) + df_spt["ispt_pen4"].astype(int) + df_spt["ispt_pen5"].astype(int) + df_spt["ispt_pen6"].astype(int)
+                    #     df_spt = df_spt.rename(columns=columns_mapping)
+                    #     df_soil = df_soil.rename(columns=columns_mapping)
+                    #     boreholes_df[borehole] = map_soil_layer_to_spt(df_soil,df_spt)
+                    #     boreholes_df[borehole].insert(0,"hole_id",borehole)
+                    
+                    # for borehole in boreholes_df:
+                    #     st.write(boreholes_df[borehole])
+
+
+
+                    ags_sg_transformer = AGSSgTransformer(file_obj, sheet_names, ags_sg_config)
+
+                    ags_sg_transformer.transform()
+
+                    transformed_dfs = ags_sg_transformer.transformed_dfs
+
+                    boreholes_df = ags_sg_transformer.boreholes_df
+
+                    sample_spts = ags_sg_transformer.sample_spts
+
+                    trig_boreholes = ags_sg_transformer.trig_boreholes   
+
+                    borehole_clss_trig = ags_sg_transformer.borehole_clss_trig
+
+                    st.write(trig_boreholes[list(trig_boreholes.keys())[0]])
+
+                    st.write(borehole_clss_trig[list(borehole_clss_trig.keys())[0]])
+
+                    st.write(boreholes_df[list(boreholes_df.keys())[0]])
+
+                    st.write(sample_spts[list(sample_spts.keys())[0]])
+
+        else:
+            
+
+            contractor_slug,transformer_name = contractor_map[st.session_state["validated_contractor"]]
+
+            # Dynamically import the module and class
+            module = importlib.import_module(f"ags_transformers.{contractor_slug}")
+            TransformerClass = getattr(module, transformer_name)
+
+            st.session_state["final_view_dict"] = {}  # reset
+            st.session_state["transformation_result"] = {} # reset
+
+            for sheet_name in st.session_state["validated_sheet_names"][:]:
+                st.write(f"Processing: {sheet_name}")
+
+                try:
+                    
+                    transformer = TransformerClass(
+                        file=uploaded_file,
+                        sheet_name=sheet_name,
+                        config=st.session_state["validated_contractor_config"]
+                    )
+                
+                    # Runs the AGS data transformation pipeline
+                    transformer.transform()
+
+                    st.write(transformer.iteration_errors)
+                    st.write(transformer.debug_df)
+
+                except Exception as e:
+                    st.error(f"Error processing for {sheet_name}: {e}")
+
+                if transformer.result and transformer.result["transformation_result"]:
+                    #st.write(transformer.mapped_specimen_spt_final_transformed_df)
+                    st.session_state["final_view_dict"][sheet_name] = transformer.result["final_view_df"]
+                    st.session_state["transformation_result"][sheet_name] = "✅ Completed"
+                
+                if transformer.result and not transformer.result["transformation_result"]:
+                    st.session_state["transformation_result"][sheet_name] = "⚠️ Failed"
+
+            st.success("✅ All boreholes processed.")
+
+            completion_status_df = pd.DataFrame({"Borehole": [k for k in st.session_state["transformation_result"].keys()],
+                                "Data Extraction Status": [v for _,v in st.session_state["transformation_result"].items()]
+                                })
+            
+            # Convert to HTML with custom CSS class
+            completion_status_html_table = completion_status_df.to_html(index=False, classes="custom-table")
+
+            # Render the HTML table
+            st.markdown(completion_status_html_table, unsafe_allow_html=True)
 
             try:
-                
-                transformer = TransformerClass(
-                    file=uploaded_file,
-                    sheet_name=sheet_name,
-                    config=st.session_state["validated_contractor_config"]
-                )
-            
-                # Runs the AGS data transformation pipeline
-                transformer.transform()
+                output_data = pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0)
+            except:
+                output_data = None
 
-                st.write(transformer.iteration_errors)
-                st.write(transformer.debug_df)
+            if isinstance(output_data,pd.DataFrame):
+                st.subheader("Output Data")
+                st.write(pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0))
 
-            except Exception as e:
-                st.error(f"Error processing for {sheet_name}: {e}")
-
-            if transformer.result and transformer.result["transformation_result"]:
-                #st.write(transformer.mapped_specimen_spt_final_transformed_df)
-                st.session_state["final_view_dict"][sheet_name] = transformer.result["final_view_df"]
-                st.session_state["transformation_result"][sheet_name] = "✅ Completed"
-            
-            if transformer.result and not transformer.result["transformation_result"]:
-                st.session_state["transformation_result"][sheet_name] = "⚠️ Failed"
-
-        st.success("✅ All boreholes processed.")
-
-        completion_status_df = pd.DataFrame({"Borehole": [k for k in st.session_state["transformation_result"].keys()],
-                               "Data Extraction Status": [v for _,v in st.session_state["transformation_result"].items()]
-                               })
-        
-        # Convert to HTML with custom CSS class
-        completion_status_html_table = completion_status_df.to_html(index=False, classes="custom-table")
-
-        # Render the HTML table
-        st.markdown(completion_status_html_table, unsafe_allow_html=True)
-
-        try:
-            output_data = pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0)
-        except:
-            output_data = None
-
-        if isinstance(output_data,pd.DataFrame):
-            st.subheader("Output Data")
-            st.write(pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0))
-
-        # st.dataframe(combined_df, height=600)  # You can increase this height
+            # st.dataframe(combined_df, height=600)  # You can increase this height

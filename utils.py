@@ -273,7 +273,7 @@ def spt_n_groupings(spt_n):
     else:
         return "UNKNOWN"
         
-def map_soil_layer_to_spt(soil_layer_data,spt_data):
+def map_soil_layer_to_spt(soil_layer_data,spt_data,spt_depth_col="depth_to_top_of_test"):
     """
     Parameters:
     
@@ -301,7 +301,7 @@ def map_soil_layer_to_spt(soil_layer_data,spt_data):
     ):
         for spt_id, spt_depth, spt_n,spt_penetration in zip(
             spt_data['spt_no'],
-            spt_data['depth_to_top_of_test'],
+            spt_data[spt_depth_col],
             spt_data['spt_n'],
             spt_data["penetration_mm"]
         ):
@@ -553,8 +553,7 @@ def merge_and_process_lab_trixial_test_data(lab_test_df, trixial_test_df,verbose
     return combined_df
 
 
-
-def map_soil_specimen_to_spt(soil_specimen_data, spt_data,borehole_id,verbose=False):
+def map_soil_specimen_to_spt(soil_specimen_data, spt_data, sample_ref_col="ref_no1", borehole_id_col="borehole_id", verbose=False):
     """
     Parameters:
         spt_data: DataFrame containing SPT results with columns:
@@ -571,10 +570,12 @@ def map_soil_specimen_to_spt(soil_specimen_data, spt_data,borehole_id,verbose=Fa
     results = []
 
     if verbose:
-        print("Total specimens to map for borehole id {}: {} soil specimens".format(borehole_id,soil_specimen_data.shape[0]))
+        if borehole_id_col in soil_specimen_data.columns:
+            bh_id_val = soil_specimen_data[borehole_id_col].iloc[0]
+            print(f"Total specimens to map for borehole id {bh_id_val}: {soil_specimen_data.shape[0]} soil specimens")
     
     # Loop through each soil specimen
-    for sample,depth in zip(soil_specimen_data["ref_no1"],soil_specimen_data["depth_m"]):
+    for sample,depth in zip(soil_specimen_data[sample_ref_col], soil_specimen_data["depth_m"]):
         # Check if sample is core or non-core type
         if re.match(r"^C", sample):
 
@@ -634,7 +635,7 @@ def map_soil_specimen_to_spt(soil_specimen_data, spt_data,borehole_id,verbose=Fa
         # Merge with the lab results 
         results = pd.DataFrame(results).drop_duplicates()
         
-        results = pd.merge(results,soil_specimen_data,left_on=["sample_ref_no"],right_on=["ref_no1"],how="left")
+        results = pd.merge(results, soil_specimen_data, left_on=["sample_ref_no"], right_on=[sample_ref_col], how="left")
         # Standardize column
         results.columns = [col_clean.clean_text(i) for i in results.columns]
         
@@ -642,6 +643,7 @@ def map_soil_specimen_to_spt(soil_specimen_data, spt_data,borehole_id,verbose=Fa
 
     else:
         return None
+
     
 def clean_and_structure_proj_borehole_drilling_table(proj_borehole_drill_data):
 
@@ -662,7 +664,41 @@ def clean_and_structure_proj_borehole_drilling_table(proj_borehole_drill_data):
 
 
 def extract_relevant_columns(df,cols_to_extract):
-    return df.loc[:,cols_to_extract]
+    return df[cols_to_extract]
+
+def find_table_indices(df, start_marker="PROJ_ID", end_marker="STOP"):
+    """
+    Find the indices that define the table boundaries in an AGS file.
+    
+    Args:
+        df (pd.DataFrame): The raw AGS data DataFrame
+        start_marker (str): The marker to identify the start of the table (default: "PROJ_ID")
+        end_marker (str): The marker to identify the end of the table (default: "STOP")
+        
+    Returns:
+        tuple: (start_row, end_row, start_col, end_col) - Indices defining the table boundaries
+    """
+    start_row = 0
+    end_row = 0
+    start_col = 0
+    end_col = 0
+
+    for i, row in enumerate(df.iloc[:,:].values):
+        for j, val in enumerate(row):
+            if j == 0 and str(val).strip().upper() == end_marker:
+                end_row = i
+                break
+            
+            val = str(val).strip().upper()
+            if val == start_marker:
+                start_row = i
+                start_col = j
+            
+            if val == end_marker:
+                end_col = j
+                break
+    
+    return start_row, end_row, start_col, end_col
 
 def clean_plotly_figure_for_export(fig):
     """
@@ -772,3 +808,24 @@ def export_plotly_charts_to_pdf(figures,title,sub_title_1,sub_title_2,output_pdf
         os.remove(img)
 
     return output_pdf
+
+
+
+def long_to_wide(df, index_col, test_type_col, value_cols):
+    """
+    Transforms a long-format DataFrame to wide-format where each test type's values are in separate columns.
+
+    Parameters:
+        df (pd.DataFrame): The input long DataFrame.
+        index_col (str): The column to use as the unique row identifier (e.g., 'test_id').
+        test_type_col (str): The column holding test type/category (e.g., 'test_type').
+        value_cols (list): List of columns containing the test values (e.g., ['value_1', 'value_2']).
+
+    Returns:
+        pd.DataFrame: Wide-format DataFrame.
+    """
+    wide = df.pivot(index=index_col, columns=test_type_col, values=value_cols)
+    # flatten the multiindex columns
+    wide.columns = [f"{val}_{test}" for val, test in wide.columns]
+    wide = wide.reset_index()
+    return wide

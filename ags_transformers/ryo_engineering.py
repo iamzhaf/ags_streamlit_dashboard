@@ -170,6 +170,19 @@ class RyoEngineeringTransformer(BaseTransformer):
 
 
     def _apply_pipeline(self, df, steps):
+        """
+        Sequentially applies a list of processing functions (steps) to a DataFrame.
+
+        Each function in `steps` takes a DataFrame as input and returns a transformed DataFrame.
+        The method prints the name of each step as it is applied, updating the DataFrame at each stage.
+
+        Args:
+            df (pd.DataFrame): The initial DataFrame to process.
+            steps (list of callable): List of functions to apply to the DataFrame in order.
+
+        Returns:
+            pd.DataFrame: The DataFrame after all processing steps have been applied.
+        """
         for step in steps:
             step_name = step.__name__
             print(f"Running: {step_name}")  # or use logging

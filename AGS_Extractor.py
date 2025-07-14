@@ -221,6 +221,9 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
 
             raw_ags_files = [k for k,_ in st.session_state["ags_excel_filenames"].items()]   
 
+            # add a placeholder to store the processed final view dataframe
+            final_views_dfs = {}
+
             # raw_ags_files contains just the filenames (strings)
             for file_name in raw_ags_files:
 
@@ -233,73 +236,23 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
 
                 if file_obj is not None:
 
-                    # transformed_dfs = {}
-
-                    # columns_mapping = {'geol_top':'start_depth_of_soil_layer_m','geol_base':'end_depth_of_soil_layer_m',
-                    #             'geol_desc':'soil_description_borelog_soil_name',
-                    #             'geol_geol':'geological_classification',
-                    #             'ispt_top':'depth_to_top_of_test'}
-                    
-                    # for s in ["HOLE","ISPT","GEOL"]:
-                    #     st.write(s)
-                    #     # Read the Excel file
-                    #     df = pd.read_excel(
-                    #         file_obj,
-                    #         sheet_name=sheet_names[cleaned_sheet_names.index(s)],
-                    #         skiprows=0
-                    #     )
-
-                    #     start_row, end_row, start_col, end_col = find_table_indices(df,"HOLE_ID","STOP")
-
-                    #     st.write(start_row, end_row, start_col, end_col)
-
-                    #     columns = df.iloc[6, :end_col]
-
-                    #     transformed_df = df.iloc[start_row+1:end_row, start_col:end_col].dropna(how="all")
-                    #     transformed_df.columns = [c.strip().lower() for c in columns]
-                    #     transformed_df["hole_id"] = transformed_df["hole_id"].str.strip()
-                    #     transformed_dfs[s] = transformed_df
-
-                    # boreholes_df = {}
-                    # for borehole in transformed_dfs["HOLE"]["hole_id"].unique():
-                    #     df_spt = transformed_dfs["ISPT"][transformed_dfs["ISPT"]["hole_id"] == borehole]
-                    #     df_soil = transformed_dfs["GEOL"][transformed_dfs["GEOL"]["hole_id"] == borehole]
-                    #     df_spt["spt_no"] =  ["spt_" + str(i).zfill(3) for i in range(1, len(df_spt) + 1)]
-                    #     cols_to_fill_zeros = ["ispt_inc3","ispt_inc4","ispt_inc5","ispt_inc6","ispt_pen3","ispt_pen4","ispt_pen5","ispt_pen6"]
-                    #     df_spt[cols_to_fill_zeros] = df_spt[cols_to_fill_zeros].fillna(0)
-                    #     df_spt["spt_n"] = df_spt["ispt_inc3"].astype(int) + df_spt["ispt_inc4"].astype(int) + df_spt["ispt_inc5"].astype(int) + df_spt["ispt_inc6"].astype(int)
-                    #     df_spt["penetration_mm"] = df_spt["ispt_pen3"].astype(int) + df_spt["ispt_pen4"].astype(int) + df_spt["ispt_pen5"].astype(int) + df_spt["ispt_pen6"].astype(int)
-                    #     df_spt = df_spt.rename(columns=columns_mapping)
-                    #     df_soil = df_soil.rename(columns=columns_mapping)
-                    #     boreholes_df[borehole] = map_soil_layer_to_spt(df_soil,df_spt)
-                    #     boreholes_df[borehole].insert(0,"hole_id",borehole)
-                    
-                    # for borehole in boreholes_df:
-                    #     st.write(boreholes_df[borehole])
-
-
-
                     ags_sg_transformer = AGSSgTransformer(file_obj, sheet_names, ags_sg_config)
 
                     ags_sg_transformer.transform()
 
                     transformed_dfs = ags_sg_transformer.transformed_dfs
 
-                    boreholes_df = ags_sg_transformer.boreholes_df
+                    final_view_df = ags_sg_transformer.final_view_df
 
-                    sample_spts = ags_sg_transformer.sample_spts
+                    if final_view_df is not None:
+                        final_views_dfs[file_name] = final_view_df
 
-                    trig_boreholes = ags_sg_transformer.trig_boreholes   
+            # union all final_views_dfs
+            final_merged_view_df = pd.concat([df for df in final_views_dfs.values()],axis=0,ignore_index=True)
 
-                    borehole_clss_trig = ags_sg_transformer.borehole_clss_trig
 
-                    st.write(trig_boreholes[list(trig_boreholes.keys())[0]])
-
-                    st.write(borehole_clss_trig[list(borehole_clss_trig.keys())[0]])
-
-                    st.write(boreholes_df[list(boreholes_df.keys())[0]])
-
-                    st.write(sample_spts[list(sample_spts.keys())[0]])
+            st.write(final_views_dfs)
+            st.write(final_merged_view_df)
 
         else:
             

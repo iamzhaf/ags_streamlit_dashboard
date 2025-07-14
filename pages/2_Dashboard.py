@@ -78,21 +78,21 @@ selected_charts = col_1.multiselect("Choose charts to display",options=[v for k,
 @st.cache_data
 def extract_relevant_cols(uploaded_file,ext):
     df = pd.read_csv(uploaded_file)
-    df = df[["project","client","easting_m", "northing_m", "depth_m", "soil_type","bh_no",
-             "drilling_depth_m","g_elevation_m",
-             "spt_n",
-             "spt_n_grouping",
-             "soil_layer",
-             "spt_depth_to_top_of_test",
-             "bulk_density_mg_m3",
-             "partical_density",
-             "water_content_%",
-             "atterberg_limit_%_ll_%",
-             "atterberg_limit_%_pl_%",
-             "uu",
-             "sample_depth",
-             "sample_ref_no"
-             ]]
+    # df = df[["project","client","easting_m", "northing_m", "depth_m", "soil_type","bh_no",
+    #          "drilling_depth_m","g_elevation_m",
+    #          "spt_n",
+    #          "spt_n_grouping",
+    #          "soil_layer",
+    #          "spt_depth_to_top_of_test",
+    #          "bulk_density_mg_m3",
+    #          "partical_density",
+    #          "water_content_%",
+    #          "atterberg_limit_%_ll_%",
+    #          "atterberg_limit_%_pl_%",
+    #          "uu",
+    #          "sample_depth",
+    #          "sample_ref_no"
+    #          ]]
     df = create_lat_long(df)
     return df
 

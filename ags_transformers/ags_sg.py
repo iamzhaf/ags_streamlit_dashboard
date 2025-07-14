@@ -40,7 +40,29 @@ class AGSSgTransformer(BaseTransformer):
             "samp_top": "depth_m",
             "trig_cu": "uu",
         }
+        self.final_view_cols_mapping = {
+            "hole_fdep": "drilling_depth_m",
+            "hole_gl": "g_elevation_m",
+            "hole_natn": "northing_m",
+            "hole_nate": "easting_m",
+            "hole_id": "hole_id",
+            "spt_depth": "spt_depth_to_top_of_test",
+            "proj_id": "project_no",
+            "proj_clnt": "client",
+            "proj_name": "project",
+            "proj_cont": "contractor",
+            "clss_ll": "atterberg_limit_%_ll_%",
+            "clss_pl": "atterberg_limit_%_pl_%",
+            "clss_bden": "bulk_density_mg_m3",
+            "clss_lden": "dry_density_mg_m3",
+            "clss_pd": "partical_density",
+            "clss_nmc": "water_content_%",
+            "hole_id":"bh_no",
+            "ref_no":"sample_ref_no",
+            "depth_m":"sample_depth"
+        }
         self.borehole_attributes = ["hole_id","hole_type","hole_nate","hole_natn","hole_gl","hole_fdep"]
+        self.project_attriutes = ["proj_id","proj_clnt","proj_name","proj_cont"]
 
 
     def _load_data(self, section_name):
@@ -137,6 +159,9 @@ class AGSSgTransformer(BaseTransformer):
 
         # Process the raw data
         transformed_df = self._transform_raw_data(raw_df, section_name)
+
+        # reset index
+        transformed_df = transformed_df.reset_index(drop=True)
 
         return transformed_df
 
@@ -378,7 +403,7 @@ class AGSSgTransformer(BaseTransformer):
 
             df_borehole = self.boreholes_df[borehole]
 
-            borehole_sample_spt = self.sample_spts[borehole][["spt_no","ref_no","depth_m"]]
+            borehole_sample_spt = self.sample_spts[borehole][["spt_no","spt_depth","ref_no","depth_m"]]
 
             self.boreholes_df[borehole] = pd.merge(df_borehole,borehole_sample_spt,on="spt_no",how="left")
 
@@ -394,7 +419,6 @@ class AGSSgTransformer(BaseTransformer):
             borehole_clss_trig = borehole_clss_trig.drop(columns=["hole_id","depth_m","?file_fset"], errors='ignore')
 
             self.boreholes_df[borehole] = pd.merge(df_borehole,borehole_clss_trig,on="ref_no",how="left")
-
 
 
     def _reorder_columns(self,columns,columns_to_move,name_col_start,name_col_end):
@@ -424,6 +448,53 @@ class AGSSgTransformer(BaseTransformer):
 
             self.boreholes_df[borehole] = self.boreholes_df[borehole][cols]
 
+
+    def _final_view_columns_mapping(self,df):
+        
+        df = df.rename(columns=self.final_view_cols_mapping)
+        
+        return df   
+
+
+    def _add_real_elevation_level_spt(self,df):
+        df["spt_elevation_level"] = df["g_elevation_m"].astype("float") - df["spt_depth_to_top_of_test"].astype("float")
+        return df
+
+
+    def _add_real_elevation_level_specimen(self,df):
+        df["sample_elevation_level"] = df["g_elevation_m"].astype("float") - df["spec_dpth"].astype("float")
+        return df
+
+    def _process_final_view(self,df):
+
+        steps = [self._add_project_details,self._final_view_columns_mapping,self._add_real_elevation_level_spt,self._add_real_elevation_level_specimen]
+
+        return self._apply_pipeline(df,steps)
+
+
+    def _add_project_details(self, df):
+        """
+        Adds project info to the data (column wise) and fills in any missing project details by copying values from above.
+        """
+        df = pd.concat([self.transformed_dfs["PROJ"][self.project_attriutes], df], axis=1)
+        df[self.project_attriutes] = df[self.project_attriutes].ffill()
+        return df
+
+    def _generate_final_view(self):
+
+        # union all boreholes (row wise)
+        self.final_view_df = pd.concat([df for df in self.boreholes_df.values()], axis=0).reset_index(drop=True)
+
+        self.final_view_df = self._process_final_view(self.final_view_df)
+
+        self.final_view_cols = self._reorder_columns(
+                                                columns=self.final_view_df.columns.tolist(),
+                                                columns_to_move=["spt_depth_to_top_of_test","spt_elevation_level","sample_elevation_level"],
+                                                name_col_start="drilling_depth_m",
+                                                name_col_end="spt_no")
+        
+        self.final_view_df = self.final_view_df[self.final_view_cols]
+        
 
     def transform(self):
         """
@@ -473,5 +544,9 @@ class AGSSgTransformer(BaseTransformer):
 
         # reorder borehole attributes columns
         self._reorder_borehole_attributes_columns()
+
+        # generate final view
+        self._generate_final_view()
+        
         
         

@@ -181,7 +181,7 @@ class RyoEngineeringTransformer(BaseTransformer):
             steps (list of callable): List of functions to apply to the DataFrame in order.
 
         Returns:
-            pd.DataFrame: The DataFrame after all processing steps have been applied.
+            pd.DataFrame: The DataFramdde after all processing steps have been applied.
         """
         for step in steps:
             step_name = step.__name__

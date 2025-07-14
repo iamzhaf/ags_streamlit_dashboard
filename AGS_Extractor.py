@@ -39,6 +39,30 @@ def create_valid_ags_file_list_df(file):
     ags_file_list_df = pd.DataFrame({"#":[*range(1,len(file)+1)],"AGS File Name":[i for i in file]})
     return ags_file_list_df
 
+
+@st.cache_data
+def create_final_view_df(final_views_dfs):
+    df = pd.concat([df for df in final_views_dfs.values()],axis=0,ignore_index=True)
+    return df
+
+
+@st.cache_data
+def convert_for_download(df):
+    return df.to_csv(index=False).encode("utf-8-sig")
+
+
+@st.cache_data
+def sort_df(df,sort_columns):
+    if sort_columns:
+        if "spt_n_grouping" in sort_columns:
+            order = ["N≤10","10<N≤30","30<N≤50","N>50","UNKNOWN"]
+            df["spt_n_grouping"] = pd.Categorical(df["spt_n_grouping"], categories=order, ordered=True)
+
+        sorted_df = df.sort_values(by=sort_columns, ascending=True)
+        return sorted_df
+    else:
+        return df
+
 # Load external CSS
 CSS_PATH = os.path.join("assets/styles.css")
 load_css(CSS_PATH)
@@ -79,6 +103,7 @@ if uploaded_files is None and "ags_excel_filenames" in st.session_state and new_
     st.session_state.pop("validated_contractor_config",None)
     st.session_state.pop("ags_excel_filenames", None)
     st.session_state.pop("ags_sg_file", None)
+    st.session_state.pop("final_merged_view_df")
 
 
 # Detect file name change or first upload
@@ -162,24 +187,6 @@ if uploaded_files:
 if "validity" in st.session_state and st.session_state["validity"] == False and not new_files_uploaded:
     st.warning("⚠️ No valid AGS file found.")
 
-# if ("validity" in st.session_state and st.session_state["validity"] == True) and ("ags_sg_file" in st.session_state and st.session_state["ags_sg_file"] == False):
-#     st.success("Successfully identified borehole data sheets!")
-#     st.markdown("<hr style='border: 2px solid black; margin: 20px 0;>", unsafe_allow_html=True)
-#     st.subheader("✅ Valid AGS File to be transformed")
-#     filenames = [k for k,_ in st.session_state["ags_excel_filenames"].items()]
-#     borehole_sheets_list_df = create_valid_ags_file_list_df(filenames)
-
-#     # Convert to HTML with custom CSS class
-#     borehole_html_table = borehole_sheets_list_df.to_html(index=False, classes="custom-table")
-
-#     # Add text to inform user to review the list of identified valid boreholes before proceeding with data extraction and transformation
-#     # st.write(f"Please review the below list of the identified valid boreholes data sheet(s) in upload AGS File ({uploaded_filename})")
-#     st.markdown(f"""<p class="black-text">
-#                     ⚠️ Please review the below list of the identified valid boreholes data sheet(s) in the uploaded AGS File ({st.session_state["ags_excel"].name})
-#                 </p>""", unsafe_allow_html=True)
-
-#     # Render the HTML table
-#     st.markdown(borehole_html_table, unsafe_allow_html=True)
 
 # AGS(SG) File
 if ("validity" in st.session_state and st.session_state["validity"] == True):
@@ -204,115 +211,149 @@ if ("validity" in st.session_state and st.session_state["validity"] == True):
 
 # Add "Run AGS Extraction" button for user to execute the AGS data transformation pipeline
 if "validity" in st.session_state and st.session_state["validity"] == True:
+
+    if "final_merged_view_df" not in st.session_state:
     
-    # Only executes the AGS extraction when "Run AGS Extraction" button is clicked
-    if st.button("Run AGS Extraction", key="run_extraction"):
+        # Only executes the AGS extraction when "Run AGS Extraction" button is clicked
+        if st.button("Run AGS Extraction", key="run_extraction"):
 
-        st.info("AGS Extraction Started. ⚠️ Do Not Refresh Browser")
-        # st.write(f"Fetcing SPT Details: {st.session_state["validated_contractor_config"]["sections"]["SPT"]}")
+            st.info("AGS Extraction Started. ⚠️ Do Not Refresh Browser")
+            # st.write(f"Fetcing SPT Details: {st.session_state["validated_contractor_config"]["sections"]["SPT"]}")
 
-        if "ags_sg_file" in st.session_state and st.session_state["ags_sg_file"] == True:
+            if "ags_sg_file" in st.session_state and st.session_state["ags_sg_file"] == True:
 
-            # Load AGS-SG config to get required sheets
-            with open("ags_configs/ags_sg.json", "r") as f:
-                ags_sg_config = json.load(f)
+                # Load AGS-SG config to get required sheets
+                with open("ags_configs/ags_sg.json", "r") as f:
+                    ags_sg_config = json.load(f)
 
-            st.write(st.session_state["ags_excel_filenames"])
+                st.write(st.session_state["ags_excel_filenames"])
 
-            raw_ags_files = [k for k,_ in st.session_state["ags_excel_filenames"].items()]   
+                raw_ags_files = [k for k,_ in st.session_state["ags_excel_filenames"].items()]   
 
-            # add a placeholder to store the processed final view dataframe
-            final_views_dfs = {}
+                # add a placeholder to store the processed final view dataframe
+                final_views_dfs = {}
 
-            # raw_ags_files contains just the filenames (strings)
-            for file_name in raw_ags_files:
+                # raw_ags_files contains just the filenames (strings)
+                for file_name in raw_ags_files:
 
-                sheet_names = st.session_state["ags_excel_filenames"][file_name]
+                    sheet_names = st.session_state["ags_excel_filenames"][file_name]
 
-                st.write(f"📄 Processing: {file_name}")
+                    st.write(f"📄 Processing: {file_name}")
+                    
+                    # Find the matching UploadedFile object
+                    file_obj = next((f for f in uploaded_files if f.name == file_name), None)
+
+                    if file_obj is not None:
+
+                        ags_sg_transformer = AGSSgTransformer(file_obj, sheet_names, ags_sg_config)
+
+                        ags_sg_transformer.transform()
+
+                        transformed_dfs = ags_sg_transformer.transformed_dfs
+
+                        final_view_df = ags_sg_transformer.final_view_df
+
+                        if final_view_df is not None:
+                            final_views_dfs[file_name] = final_view_df
+
+                # union all final_views_dfs
+                final_merged_view_df = create_final_view_df(final_views_dfs)
+
+                st.session_state["final_merged_view_df"] = final_merged_view_df
+
+
+            else:
                 
-                # Find the matching UploadedFile object
-                file_obj = next((f for f in uploaded_files if f.name == file_name), None)
 
-                if file_obj is not None:
+                contractor_slug,transformer_name = contractor_map[st.session_state["validated_contractor"]]
 
-                    ags_sg_transformer = AGSSgTransformer(file_obj, sheet_names, ags_sg_config)
+                # Dynamically import the module and class
+                module = importlib.import_module(f"ags_transformers.{contractor_slug}")
+                TransformerClass = getattr(module, transformer_name)
 
-                    ags_sg_transformer.transform()
+                st.session_state["final_view_dict"] = {}  # reset
+                st.session_state["transformation_result"] = {} # reset
 
-                    transformed_dfs = ags_sg_transformer.transformed_dfs
+                for sheet_name in st.session_state["validated_sheet_names"][:]:
+                    st.write(f"Processing: {sheet_name}")
 
-                    final_view_df = ags_sg_transformer.final_view_df
+                    try:
+                        
+                        transformer = TransformerClass(
+                            file=uploaded_file,
+                            sheet_name=sheet_name,
+                            config=st.session_state["validated_contractor_config"]
+                        )
+                    
+                        # Runs the AGS data transformation pipeline
+                        transformer.transform()
 
-                    if final_view_df is not None:
-                        final_views_dfs[file_name] = final_view_df
+                        st.write(transformer.iteration_errors)
+                        st.write(transformer.debug_df)
 
-            # union all final_views_dfs
-            final_merged_view_df = pd.concat([df for df in final_views_dfs.values()],axis=0,ignore_index=True)
+                    except Exception as e:
+                        st.error(f"Error processing for {sheet_name}: {e}")
 
+                    if transformer.result and transformer.result["transformation_result"]:
+                        #st.write(transformer.mapped_specimen_spt_final_transformed_df)
+                        st.session_state["final_view_dict"][sheet_name] = transformer.result["final_view_df"]
+                        st.session_state["transformation_result"][sheet_name] = "✅ Completed"
+                    
+                    if transformer.result and not transformer.result["transformation_result"]:
+                        st.session_state["transformation_result"][sheet_name] = "⚠️ Failed"
 
-            st.write(final_views_dfs)
-            st.write(final_merged_view_df)
+                st.success("✅ All boreholes processed.")
 
-        else:
-            
+                completion_status_df = pd.DataFrame({"Borehole": [k for k in st.session_state["transformation_result"].keys()],
+                                    "Data Extraction Status": [v for _,v in st.session_state["transformation_result"].items()]
+                                    })
+                
+                # Convert to HTML with custom CSS class
+                completion_status_html_table = completion_status_df.to_html(index=False, classes="custom-table")
 
-            contractor_slug,transformer_name = contractor_map[st.session_state["validated_contractor"]]
-
-            # Dynamically import the module and class
-            module = importlib.import_module(f"ags_transformers.{contractor_slug}")
-            TransformerClass = getattr(module, transformer_name)
-
-            st.session_state["final_view_dict"] = {}  # reset
-            st.session_state["transformation_result"] = {} # reset
-
-            for sheet_name in st.session_state["validated_sheet_names"][:]:
-                st.write(f"Processing: {sheet_name}")
+                # Render the HTML table
+                st.markdown(completion_status_html_table, unsafe_allow_html=True)
 
                 try:
-                    
-                    transformer = TransformerClass(
-                        file=uploaded_file,
-                        sheet_name=sheet_name,
-                        config=st.session_state["validated_contractor_config"]
-                    )
-                
-                    # Runs the AGS data transformation pipeline
-                    transformer.transform()
+                    output_data = pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0)
+                except:
+                    output_data = None
 
-                    st.write(transformer.iteration_errors)
-                    st.write(transformer.debug_df)
+                if isinstance(output_data,pd.DataFrame):
+                    st.subheader("Output Data")
+                    st.write(pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0))
 
-                except Exception as e:
-                    st.error(f"Error processing for {sheet_name}: {e}")
+                # st.dataframe(combined_df, height=600)  # You can increase this height
 
-                if transformer.result and transformer.result["transformation_result"]:
-                    #st.write(transformer.mapped_specimen_spt_final_transformed_df)
-                    st.session_state["final_view_dict"][sheet_name] = transformer.result["final_view_df"]
-                    st.session_state["transformation_result"][sheet_name] = "✅ Completed"
-                
-                if transformer.result and not transformer.result["transformation_result"]:
-                    st.session_state["transformation_result"][sheet_name] = "⚠️ Failed"
 
-            st.success("✅ All boreholes processed.")
+if "final_merged_view_df" in st.session_state:
+    if isinstance(st.session_state["final_merged_view_df"], pd.DataFrame) and not st.session_state["final_merged_view_df"].empty:
+        with st.expander("✅ Final View is ready to be downloaded"):
 
-            completion_status_df = pd.DataFrame({"Borehole": [k for k in st.session_state["transformation_result"].keys()],
-                                "Data Extraction Status": [v for _,v in st.session_state["transformation_result"].items()]
-                                })
-            
-            # Convert to HTML with custom CSS class
-            completion_status_html_table = completion_status_df.to_html(index=False, classes="custom-table")
+            # Let user choose columns to sort by
+            sort_columns = st.multiselect(
+                "Select column(s) to sort by before downloading",
+                options=["soil_layer","spt_n_grouping","bh_no"],
+                default=["spt_n_grouping","soil_layer"]
+            )
 
-            # Render the HTML table
-            st.markdown(completion_status_html_table, unsafe_allow_html=True)
+            # Sort and display the DataFrame
+            if sort_columns:
+                st.session_state["final_merged_view_df"] = sort_df(st.session_state["final_merged_view_df"],sort_columns)
+                st.write("### Sorted Data")
+                st.dataframe(st.session_state["final_merged_view_df"])
 
-            try:
-                output_data = pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0)
-            except:
-                output_data = None
 
-            if isinstance(output_data,pd.DataFrame):
-                st.subheader("Output Data")
-                st.write(pd.concat([df for _,df in st.session_state["final_view_dict"].items() if isinstance(df,pd.DataFrame)],axis=0))
+                csv = convert_for_download(st.session_state["final_merged_view_df"])
 
-            # st.dataframe(combined_df, height=600)  # You can increase this height
+                st.download_button(
+                        label="Download Processed AGS Data",
+                        data=csv,
+                        file_name="data.csv",
+                    mime="text/csv",
+                    icon=":material/download:",
+                )
+
+            else:
+
+                st.warning("Please select at least one column to sort by.")

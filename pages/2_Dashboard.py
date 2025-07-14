@@ -13,6 +13,7 @@ from plots import plot_undrained_shear_strength_plotly
 from plots import plot_undrained_shear_strength_sptn_plotly
 from plots import plot_bulk_density_plotly
 from utils import export_plotly_charts_to_pdf
+from plot_geological_map import display_geological_map_with_boreholes
 import re
 
 
@@ -29,9 +30,6 @@ def wide_space_default():
 
 # Set wide as the default layout
 # wide_space_default()
-
-st.title("📈 Dashboard")
-    
 
 # Load external CSS
 CSS_PATH = os.path.join("assets/styles.css")
@@ -78,30 +76,19 @@ selected_charts = col_1.multiselect("Choose charts to display",options=[v for k,
 @st.cache_data
 def extract_relevant_cols(uploaded_file,ext):
     df = pd.read_csv(uploaded_file)
-    # df = df[["project","client","easting_m", "northing_m", "depth_m", "soil_type","bh_no",
-    #          "drilling_depth_m","g_elevation_m",
-    #          "spt_n",
-    #          "spt_n_grouping",
-    #          "soil_layer",
-    #          "spt_depth_to_top_of_test",
-    #          "bulk_density_mg_m3",
-    #          "partical_density",
-    #          "water_content_%",
-    #          "atterberg_limit_%_ll_%",
-    #          "atterberg_limit_%_pl_%",
-    #          "uu",
-    #          "sample_depth",
-    #          "sample_ref_no"
-    #          ]]
     df = create_lat_long(df)
     return df
 
+@st.cache_data
+def create_boreholes_coor_df(df):
+    boreholes_coor_df = df[["bh_no","lat","lon"]]
+    return boreholes_coor_df
 
 
 def create_lat_long(df):
     # Convert Easting/Northing to Lat/Lon
     svy21 = pyproj.Transformer.from_crs("EPSG:3414", "EPSG:4326", always_xy=True)
-    df["Longitude"], df["Latitude"] = svy21.transform(df["easting_m"].values, df["northing_m"].values)
+    df["lon"], df["lat"] = svy21.transform(df["easting_m"].values, df["northing_m"].values)
     return df
 
 
@@ -129,7 +116,8 @@ if dashboard_uploaded_file:
 
             if file_name.endswith(".csv") or file_name.endswith(".xlsx"):
                 df = extract_relevant_cols(dashboard_uploaded_file, ".csv")
-                st.session_state["df"] = df  
+                st.session_state["df"] = df     
+                st.session_state["boreholes_coor_df"] = create_boreholes_coor_df(df)
 
             else:
                 col_2.error("Unsupported file format. Please upload a CSV or Excel file.")
@@ -223,12 +211,12 @@ with col_2:
     )
 
 
-if "df" in locals():  # make sure df exists
+if "boreholes_coor_df" in st.session_state:  # make sure df exists
     if "Borehole Mapping" in selected_charts:
         col_2.subheader("Borehole Location Map (Black Circles = Borehole Point)" )
         try:
-            fig = plot_borehole_mapping(df, lat='Latitude', lon="Longitude",title="")
-            col_2.plotly_chart(fig, use_container_width=False)
+            with col_2.container():
+                display_geological_map_with_boreholes(st.session_state["boreholes_coor_df"])
         except Exception as e:
             col_2.error(f"Error plotting Borehole Location Map: {e}")
 

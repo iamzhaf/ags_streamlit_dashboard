@@ -119,6 +119,12 @@
                 "start_marker": "HOLE_ID",
                 "end_marker": "STOP",
                  "columns":[]
+            },
+            "IPRM": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
             }
     }
 }

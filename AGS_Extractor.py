@@ -58,8 +58,13 @@ def sort_df(df,sort_columns):
             order = ["N≤10","10<N≤30","30<N≤50","N>50","UNKNOWN"]
             df["spt_n_grouping"] = pd.Categorical(df["spt_n_grouping"], categories=order, ordered=True)
 
+        if "bh_no" in sort_columns:
+            sort_columns = ["bh_no"] + ["start_depth_of_soil_layer_m","samp_top","spt_depth_to_top_of_test"]
+
         sorted_df = df.sort_values(by=sort_columns, ascending=True)
+
         return sorted_df
+
     else:
         return df
 
@@ -250,8 +255,6 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
                         ags_sg_transformer.extract_data()
 
                         transformed_dfs = ags_sg_transformer.transformed_dfs
-
-                        st.write(transformed_dfs["ISPT"])
 
                         ags_sg_transformer.transform()
 

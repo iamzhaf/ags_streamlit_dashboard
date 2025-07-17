@@ -110,7 +110,9 @@ class AGSSgTransformer(BaseTransformer):
 
             skiprows = configs.get("skiprows", 0)
             usecols = configs.get("columns_section", None)
-            df = self.extract_data_per_sheet(skiprows, usecols,sheet_name)
+            column_converters = configs.get("column_converters", None)
+            
+            df = self.extract_data_per_sheet(skiprows, usecols,sheet_name,column_converters)
 
         if df is None:
             raise ValueError(f"The section data, {section_name}, could not be extracted")
@@ -118,7 +120,7 @@ class AGSSgTransformer(BaseTransformer):
         return df
 
 
-    def extract_data_per_sheet(self, skiprows, usecols=None, sheet_name=None):
+    def extract_data_per_sheet(self, skiprows, usecols=None, sheet_name=None,column_converters=None):
         """
         Extract Excel data for specified sheet(s).
 
@@ -130,12 +132,21 @@ class AGSSgTransformer(BaseTransformer):
             pd.DataFrame or None:
         """
         try:
-            df = pd.read_excel(
-                self.file,
-                sheet_name=sheet_name,
-                skiprows=skiprows,
-                usecols=usecols
-            )
+            if column_converters:
+                df = pd.read_excel(
+                    self.file,
+                    sheet_name=sheet_name,
+                    skiprows=skiprows,
+                    usecols=usecols,
+                    column_converters=column_converters
+                )
+            else:
+                df = pd.read_excel(
+                    self.file,
+                    sheet_name=sheet_name,
+                    skiprows=skiprows,
+                    usecols=usecols
+                )
             return df
         except Exception as e:
             return None
@@ -350,17 +361,37 @@ class AGSSgTransformer(BaseTransformer):
             # st.write(df)
            
 
+    # def _create_sample_ref_no(self,df):
+    #     """
+    #     Create a new column 'sample_ref_no' as a composite key of 'sample_ref' and 'sample_type',
+    #     delimited by '-', and insert it after 'hole_id' in each DataFrame in self.boreholes_df.
+    #     """
+    #     if 'samp_ref' in df.columns and 'samp_type' in df.columns and 'hole_id' in df.columns:
+    #         sample_ref_no =  df['samp_type'].astype(str) + "-" + df['samp_ref'].astype(str)
+    #         # Find the position of 'hole_id'
+    #         hole_id_idx = df.columns.get_loc('hole_id')
+    #         # Insert the new column after 'hole_id'
+    #         df.insert(hole_id_idx + 1, 'ref_no', sample_ref_no) 
+    #         return df
+    #     else:
+    #         return df
+
+
     def _create_sample_ref_no(self,df):
-        """
-        Create a new column 'sample_ref_no' as a composite key of 'sample_ref' and 'sample_type',
-        delimited by '-', and insert it after 'hole_id' in each DataFrame in self.boreholes_df.
-        """
-        if 'samp_ref' in df.columns and 'samp_type' in df.columns and 'hole_id' in df.columns:
-            sample_ref_no =  df['samp_type'].astype(str) + "-" + df['samp_ref'].astype(str)
+        if 'samp_ref' in df.columns and ('samp_top' in df.columns or 'depth_m' in df.columns) and 'hole_id' in df.columns:
+            
+            if 'samp_top' in df.columns:
+                running_no = df["samp_top"].astype(str).str.strip()
+            else:
+                running_no = df["depth_m"].astype(str).str.strip()
+
+            sample_ref_no = running_no + "-" + df['samp_ref'].astype(str).str.strip()
+
             # Find the position of 'hole_id'
             hole_id_idx = df.columns.get_loc('hole_id')
             # Insert the new column after 'hole_id'
             df.insert(hole_id_idx + 1, 'ref_no', sample_ref_no) 
+
             return df
         else:
             return df
@@ -383,6 +414,10 @@ class AGSSgTransformer(BaseTransformer):
 
             borehole_samp = self._process_samp_df(borehole_samp)
 
+            st.write("Processed Samp Data")
+
+            st.write(borehole_samp)
+
             mapped_samp_spt_df = map_soil_specimen_to_spt(soil_specimen_data=borehole_samp,
                                 spt_data=borehole_spt,
                                 sample_ref_col="ref_no",
@@ -390,6 +425,8 @@ class AGSSgTransformer(BaseTransformer):
                                 start_depth_col="start_depth_of_soil_layer_m",
                                 end_depth_col="end_depth_of_soil_layer_m",
                                 verbose=False)
+
+            
 
             # st.write("Mapping Soil Specimen to SPT for {}".format(borehole))
             # st.write(mapped_samp_spt_df)
@@ -753,14 +790,18 @@ class AGSSgTransformer(BaseTransformer):
 
             df_layer_samples = self.soil_layer_samples[borehole]
 
+            sample_spts = self.sample_spts[borehole].loc[:,["spt_no","sample_ref_no"]].dropna(subset=["spt_no"],how="all")
+
             df_layer_samples = pd.merge(
                                     df_layer_samples,
-                                    self.sample_spts[borehole].loc[:,["spt_no","sample_ref_no"]],
+                                    sample_spts,
                                     left_on=["ref_no"],
                                     right_on=["sample_ref_no"],
                                     how="outer",
                                     indicator=True
                                     )
+
+            st.write(sample_spts)
 
             # fill missing sample_ref_no with ref_no using chain method
             df_layer_samples["sample_ref_no"] = df_layer_samples["sample_ref_no"].fillna(df_layer_samples["ref_no"])
@@ -781,6 +822,10 @@ class AGSSgTransformer(BaseTransformer):
         for borehole in self.transformed_dfs["HOLE"]["hole_id"].unique():
 
             df_layer_samples = self.soil_layer_samples[borehole]
+
+            st.write("Layer Samples for borehole {}".format(borehole))
+
+            st.write(df_layer_samples.sort_values(by=["start_depth_of_soil_layer_m"],ascending=True))   
 
             df_layer_samples = df_layer_samples[df_layer_samples["_merge"] == "left_only"]
 
@@ -817,7 +862,7 @@ class AGSSgTransformer(BaseTransformer):
 
             # st.write(samples.columns.tolist())
 
-            combined_df = pd.merge(combined_df,samples.loc[:,["sample_ref_no","samp_top","samp_base","samp_desc","samp_rem"]],on=["sample_ref_no"],how="left")
+            combined_df = pd.merge(combined_df,samples.loc[:,["sample_ref_no","samp_ref","samp_type","samp_top","samp_base","samp_desc","samp_rem"]],on=["sample_ref_no"],how="left")
 
             # sort by stratum top then by sample top
             combined_df = combined_df.sort_values(by=["start_depth_of_soil_layer_m","samp_top","spt_depth_to_top_of_test"],ascending=[True,True,True])
@@ -1171,11 +1216,11 @@ class AGSSgTransformer(BaseTransformer):
             # process stratum dataframes
             self._transformed_stratum_data()
 
-            # st.write("Processed GEOL Data")
+            st.write("Processed GEOL Data")
 
-            # st.write(self.transformed_dfs["GEOL"])
+            st.write(self.transformed_dfs["GEOL"])
 
-            # st.write(self.transformed_dfs["SAMP"])
+            st.write(self.transformed_dfs["SAMP"])
 
             # generate spt and soil layer dataframes
             self._generate_spt_soil_layer_dataframes()
@@ -1186,8 +1231,12 @@ class AGSSgTransformer(BaseTransformer):
             # join all samples
             self._generate_sample_soil_layer_dataframes()
 
+            st.write("Generated Sample Soil Layer Dataframes")
+            
             # generate sample spt dataframes
             self._generate_samp_spt_dataframes()
+
+            st.write("generated sample spt dataframes")
 
             # join layer_sample with sample_spt
             self._join_layer_sample_with_sample_spt()

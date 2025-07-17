@@ -247,9 +247,13 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
 
                         ags_sg_transformer = AGSSgTransformer(file_obj, sheet_names, ags_sg_config)
 
-                        ags_sg_transformer.transform()
+                        ags_sg_transformer.extract_data()
 
                         transformed_dfs = ags_sg_transformer.transformed_dfs
+
+                        st.write(transformed_dfs["ISPT"])
+
+                        ags_sg_transformer.transform()
 
                         final_view_df = ags_sg_transformer.final_view_df
 
@@ -333,8 +337,8 @@ if "final_merged_view_df" in st.session_state:
             # Let user choose columns to sort by
             sort_columns = st.multiselect(
                 "Select column(s) to sort by before downloading",
-                options=["soil_layer","spt_n_grouping","bh_no"],
-                default=["spt_n_grouping","soil_layer"]
+                options=["soil_type","spt_n_grouping","bh_no"],
+                default=["spt_n_grouping","soil_type"]
             )
 
             # Sort and display the DataFrame

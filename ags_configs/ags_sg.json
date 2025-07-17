@@ -32,6 +32,7 @@
                 "skiprows": 0,
                 "start_marker": "HOLE_ID",
                 "end_marker": "STOP",
+                "depth_top_column": "ISPT_TOP",
                 "columns":[
                                 "PROJ_ID","HOLE_ID","ISPT_TOP","ISPT_SEAT",
                                 "ISPT_MAIN","ISPT_NPEN","ISPT_NVAL","ISPT_TYPE","ISPT_CAS",
@@ -43,6 +44,8 @@
                 "skiprows": 0,
                 "start_marker": "HOLE_ID",
                 "end_marker": "STOP",
+                "depth_top_column": "GEOL_TOP",
+                "depth_bottom_column": "GEOL_BASE",
                 "columns":[
                                 "PROJ_ID","HOLE_ID","GEOL_TOP","GEOL_BASE",
                                 "GEOL_DESC","GEOL_LEG","GEOL_CODE","GEOL_GEO3","GEOL_STAT"
@@ -53,6 +56,8 @@
                 "skiprows": 0,
                 "start_marker": "HOLE_ID",
                 "end_marker": "STOP",
+                "depth_top_column": "SAMP_TOP",
+                "depth_bottom_column": "SAMP_BASE",
                  "columns":[
                                 "PROJ_ID","HOLE_ID","GEOL_STAT","SAMP_TOP","SAMP_BASE",
                                 "SAMP_DIA","SAMP_TYPE","SAMP_DESC","SAMP_DATE","SAMP_TIME",
@@ -63,9 +68,53 @@
                 "skiprows": 0,
                 "start_marker": "HOLE_ID",
                 "end_marker": "STOP",
+                "depth_top_column": "TRIG_TOP",
+                "depth_bottom_column": "TRIG_BASE",
                  "columns":[]
             },
             "CLSS": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
+            },
+            "ROCK": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
+            },
+            "CORE": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
+            },
+            "CNMT": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
+            },
+            "CONG": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
+            },
+            "GRAD": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
+            },
+            "TRIX": {
+                "skiprows": 0,
+                "start_marker": "HOLE_ID",
+                "end_marker": "STOP",
+                 "columns":[]
+            },
+            "PTST": {
                 "skiprows": 0,
                 "start_marker": "HOLE_ID",
                 "end_marker": "STOP",

@@ -1042,3 +1042,53 @@ def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col=
     )
 
     return fig
+
+
+def plot_soil_thickness_across_boreholes(df,soil_top_col="soil_layer_start_depth_m",soil_bottom_col="soil_layer_end_depth_m",title=""):
+
+    df["soil_thickness"] = df[soil_bottom_col] - df[soil_top_col]
+
+    
+    df["Label"] = df["soil_thickness"].round(1).astype(str) + " m"
+
+    grouped = df.groupby(["soil_layer"]).agg({"soil_thickness":"sum"}).sort_values(["soil_thickness"],ascending=False)
+
+
+    grouped["Label"] = grouped["soil_thickness"].round(1).astype(str) + " m"
+
+    fig = px.bar(
+                    grouped, 
+                    x=grouped.index, 
+                    y="soil_thickness", 
+                    text="Label",
+                    title=title)
+
+    fig.update_traces(
+        textfont=dict(
+            size=16,             # Font size
+            family="Arial",      # Optional: set font type
+            color="black",       # Optional: set font color
+        )
+    )
+    fig.update_layout(
+    xaxis=dict(
+        title="Soil Layer",
+        title_font=dict(size=18, family="Arial", color="black"),  # bold & bigger
+        tickfont=dict(size=14)
+    ),
+    yaxis=dict(
+        title="Soil Thickness (m)",
+        title_font=dict(size=18, family="Arial", color="black"),
+        tickfont=dict(size=14),
+        showgrid=True,
+        dtick=50,
+        gridcolor="lightgrey"
+    ),
+        plot_bgcolor="#f9f9f9",
+        paper_bgcolor="#ffffff",
+        font=dict(size=14),
+        height=450,
+        margin=dict(l=80, r=60, t=40, b=80),  # Increase these as needed
+    )
+
+    return fig

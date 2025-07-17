@@ -12,6 +12,7 @@ from plots import plot_partical_density_plotly
 from plots import plot_undrained_shear_strength_plotly
 from plots import plot_undrained_shear_strength_sptn_plotly
 from plots import plot_bulk_density_plotly
+from plots import plot_soil_thickness_across_boreholes
 from utils import export_plotly_charts_to_pdf
 from plot_geological_map import display_geological_map_with_boreholes
 import re
@@ -58,7 +59,8 @@ chart_options = {
     "Show Chart 6": "Specific Gravity vs Depth",
     "Show Chart 7": "Bulk Density vs Depth",
     "Show Chart 8": "Undrained Shear Strength vs Depth",
-    "Show Chart 9": "SPT-N vs Undrained Shear Strength"
+    "Show Chart 9": "SPT-N vs Undrained Shear Strength",
+    "Show Chart 10": "Soil Thickness"
 }
 
 
@@ -180,7 +182,7 @@ with col_2:
     col_2.markdown(
         f"""
         <div style="{shared_card_style}">
-            <p style="{title_style}">Project Name:</p>
+            <p style="{title_style}">Project Site:</p>
             <h2 style="{value_style_1}">{proj_id}</h1>
         </div>
         """,
@@ -210,6 +212,16 @@ with col_2:
         unsafe_allow_html=True
     )
 
+
+if "df" in locals():
+
+    if "Soil Thickness" in selected_charts:
+        col_2.subheader("Cumulative Soil Layer Thickness Profile (Site-Wide)")
+        try:
+            fig = plot_soil_thickness_across_boreholes(df, soil_top_col="soil_layer_start_depth_m",soil_bottom_col="soil_layer_end_depth_m",title="")
+            col_2.plotly_chart(fig, use_container_width=False)
+        except Exception as e:
+            col_2.error(f"Error plotting Soil Thickness: {e}")
 
 if "boreholes_coor_df" in st.session_state:  # make sure df exists
     if "Borehole Mapping" in selected_charts:

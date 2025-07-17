@@ -293,11 +293,12 @@ def map_soil_layer_to_spt(soil_layer_data,spt_data,spt_depth_col="depth_to_top_o
     
     results = []
 
-    for d_from, d_to, geo_class,soil_desc in zip(
+    for d_from, d_to, geo_class,soil_desc,stratum_id in zip(
         soil_layer_data['start_depth_of_soil_layer_m'],
         soil_layer_data['end_depth_of_soil_layer_m'],
         soil_layer_data['geological_classification'],
-        soil_layer_data['soil_description_borelog_soil_name']
+        soil_layer_data['soil_description_borelog_soil_name'],
+        soil_layer_data['stratum_id'],
     ):
         for spt_id, spt_depth, spt_n,spt_penetration in zip(
             spt_data['spt_no'],
@@ -307,6 +308,7 @@ def map_soil_layer_to_spt(soil_layer_data,spt_data,spt_depth_col="depth_to_top_o
         ):
             if (d_from <= spt_depth) and (spt_depth < d_to):
                 results.append({
+                    'stratum_id': stratum_id,
                     'spt_no': spt_id,
                     'spt_depth_to_top_of_test': spt_depth,
                     'spt_n': spt_n,
@@ -319,6 +321,75 @@ def map_soil_layer_to_spt(soil_layer_data,spt_data,spt_depth_col="depth_to_top_o
                 })
 
     return pd.DataFrame(results)
+
+
+
+def map_stratum_layer_to_rock_samples(stratum_layer_data,rock_samples_data,stratum_layer_depth_col="depth_to_top_of_test",end_stratum_layer_depth_col="depth_to_top_of_test"):
+    
+    results = []
+
+    for d_from, d_to in zip(
+        stratum_layer_data[stratum_layer_depth_col],
+        stratum_layer_data[end_stratum_layer_depth_col],
+    ):
+        for samp_top,ref_no in zip(
+            rock_samples_data['depth_m'],
+            rock_samples_data['ref_no'],
+        ):
+            if (d_from <= samp_top) and (samp_top < d_to):
+                results.append({
+                    'rock_ref_no': ref_no,
+                    'samp_top': samp_top,
+                    'geol_top': d_from,
+                    'geol_base': d_to
+                })
+    if results:
+
+        return pd.DataFrame(results)
+
+    else:
+
+        return pd.DataFrame({
+                    'rock_ref_no': [],
+                    'samp_top': [],
+                    'geol_top': [],
+                    'geol_base': []
+                })
+
+
+
+def map_core_to_stratum_layer(core_data,stratum_layer_data,stratum_id="stratum_id",stratum_layer_depth_col="depth_to_top_of_test",end_stratum_layer_depth_col="depth_to_top_of_test"):
+    
+    results = []
+
+    for d_from, d_to,stratum_id in zip(
+        stratum_layer_data[stratum_layer_depth_col],
+        stratum_layer_data[end_stratum_layer_depth_col],
+        stratum_layer_data[stratum_id],
+    ):
+        for core_top,core_ref_no in zip(
+            core_data['core_top'],
+            core_data['core_ref_no'],
+        ):
+            if (d_from <= core_top) and (core_top < d_to):
+                results.append({
+                    'matched_stratum_id':   stratum_id,
+                    'core_top': core_top,
+                    'core_base': d_to,
+                    'core_ref_no': core_ref_no
+                })
+    if results:
+
+        return pd.DataFrame(results)
+
+    else:
+
+        return pd.DataFrame({
+                    'matched_stratum_id': [],
+                    'core_top': [],
+                    'core_base': [],
+                    'core_ref_no': []
+                })
 
 
 def get_valid_borehole_sheets(ags_excel_file, all_sheet_names, config, extract_borehole_number_fn,verbose=False):
@@ -451,6 +522,39 @@ def clean_and_structure_triaxial_test_table(triaxial_test):
     return triaxial_test
 
 
+def is_probably_numeric(value):
+    try:
+        float(value)
+        return True
+    except:
+        return False
+
+def drop_metadata_rows(df):
+
+
+    keywords = ['<unit>','<UNITS>', 'unit', 'mm', 'm','deg','MN/m2','kN/m2','cm3']
+
+    if df.shape[0] < 3:
+        return df  # Not enough rows to make a decision
+
+    row1 = df.iloc[1]
+    row2 = df.iloc[2]
+
+    match_count = 0
+
+    for col in df.columns:
+        val1 = str(row1[col]).strip().lower()
+        val2 = str(row2[col]).strip().lower()
+
+        if any(kw in val1 for kw in keywords) and is_probably_numeric(val2):
+            match_count += 1
+
+    if match_count >= len(df.columns) // 3:  # Drop if at least 1/3rd look like unit-to-number
+        df = df.drop(index=df.index[1]).reset_index(drop=True)
+
+    return df
+
+
 def parse_triaxial_row(test_str, c_str, phi_str,verbose=False):
     """
     Smart parser that handles:
@@ -506,6 +610,61 @@ def parse_triaxial_row(test_str, c_str, phi_str,verbose=False):
     return result
 
 
+
+def map_sample_to_stratum(sample_df, borehole_with_stratum, sample_depth_col="depth_m", stratum_id_col="stratum_id", stratum_top_col="stratum_top", stratum_base_col="stratum_base",tolerance=0.01, verbose=False):
+    """
+    Maps each sample to its corresponding stratum layer based on depth.
+
+    Parameters:
+    - sample_df: DataFrame containing soil samples
+    - stratum_df: DataFrame containing stratum layer information
+    - sample_depth_col: Column in sample_df representing depth of sample
+    - stratum_top_col: Column in stratum_df representing top depth of stratum
+    - stratum_base_col: Column in stratum_df representing base depth of stratum
+    - verbose: If True, prints matching info
+
+    Returns:
+    - A new DataFrame with matched stratum information for each sample
+    """
+
+    results = []
+
+    for _, sample_row in sample_df.iterrows():
+        sample_depth = sample_row[sample_depth_col]
+        matched = False
+
+        for _, stratum_row in borehole_with_stratum.iterrows():
+            stratum_top = stratum_row[stratum_top_col]
+            stratum_base = stratum_row[stratum_base_col]
+            stratum_id = stratum_row[stratum_id_col]
+
+            if (stratum_top - tolerance) <= sample_depth < (stratum_base + tolerance):
+                result = sample_row.to_dict()
+                result.update({
+                    "matched_stratum_top": stratum_top,
+                    "matched_stratum_base": stratum_base,
+                    "matched_stratum_id": stratum_id,
+                })
+                results.append(result)
+                matched = True
+                if verbose:
+                    print(f"[✓] Sample at {sample_depth}m matched to stratum {stratum_top}–{stratum_base}m")
+                break
+        
+        if not matched:
+            result = sample_row.to_dict()
+            result.update({
+                "matched_stratum_top": None,
+                "matched_stratum_base": None,
+                "matched_stratum_id": None
+            })
+            results.append(result)
+            if verbose:
+                print(f"[!] Sample at {sample_depth}m has no matching stratum")
+
+    return pd.DataFrame(results)    
+
+
 def merge_and_process_lab_trixial_test_data(lab_test_df, trixial_test_df,verbose=False):
     """
     Processes triaxial lab test data if present, else returns only normal lab test data.
@@ -553,7 +712,7 @@ def merge_and_process_lab_trixial_test_data(lab_test_df, trixial_test_df,verbose
     return combined_df
 
 
-def map_soil_specimen_to_spt(soil_specimen_data, spt_data, sample_ref_col="ref_no1", borehole_id_col="borehole_id", verbose=False):
+def map_soil_specimen_to_spt(soil_specimen_data, spt_data, sample_ref_col="ref_no1", borehole_id_col="borehole_id",start_depth_col="soil_layer_start_depth_m",end_depth_col="soil_layer_end_depth_m", verbose=False):
     """
     Parameters:
         spt_data: DataFrame containing SPT results with columns:
@@ -561,7 +720,8 @@ def map_soil_specimen_to_spt(soil_specimen_data, spt_data, sample_ref_col="ref_n
             - 'soil_layer_start_depth_m'
             - 'soil_layer_end_depth_m'
             
-        soil_sample_data: DataFrame containing soil specimen lab test data 
+        soil_sample_data: DataFrame containing soil specimen lab test data with columns:
+
 
     Returns:
         A new DataFrame mapping each SPT to the correct soil layer.
@@ -594,7 +754,7 @@ def map_soil_specimen_to_spt(soil_specimen_data, spt_data, sample_ref_col="ref_n
                 print(f"Checking sample {sample} at depth {depth:.2f}m")
                 
             # Search for SPTs within the same soil layer
-            for d_from,d_to,spt_no,spt_depth in zip(spt_data["soil_layer_start_depth_m"],spt_data["soil_layer_end_depth_m"],spt_data["spt_no"],spt_data["spt_depth_to_top_of_test"]):
+            for d_from,d_to,spt_no,spt_depth in zip(spt_data[start_depth_col],spt_data[end_depth_col],spt_data["spt_no"],spt_data["spt_depth_to_top_of_test"]):
                 
                 if (d_from <= depth) and (depth < d_to):
                     
@@ -666,6 +826,7 @@ def clean_and_structure_proj_borehole_drilling_table(proj_borehole_drill_data):
 def extract_relevant_columns(df,cols_to_extract):
     return df[cols_to_extract]
 
+
 def find_table_indices(df, start_marker="PROJ_ID", end_marker="STOP"):
     """
     Find the indices that define the table boundaries in an AGS file.
@@ -678,27 +839,34 @@ def find_table_indices(df, start_marker="PROJ_ID", end_marker="STOP"):
     Returns:
         tuple: (start_row, end_row, start_col, end_col) - Indices defining the table boundaries
     """
-    start_row = 0
-    end_row = 0
-    start_col = 0
-    end_col = 0
+    start_row = None
+    end_row = None
+    start_col = None
+    end_col = None
 
-    for i, row in enumerate(df.iloc[:,:].values):
+    for i, row in enumerate(df.iloc[:21,:].values):
+
         for j, val in enumerate(row):
-            if j == 0 and str(val).strip().upper() == end_marker:
+
+            val = str(val).strip().upper().replace("*","")
+            
+            if j == 0 and val == end_marker:
                 end_row = i
                 break
-            
-            val = str(val).strip().upper()
+                
             if val == start_marker:
                 start_row = i
                 start_col = j
             
             if val == end_marker:
                 end_col = j
+
+
+            if j == len(row)-1 and end_col is None:
+                end_col = j
                 break
-    
     return start_row, end_row, start_col, end_col
+
 
 def clean_plotly_figure_for_export(fig):
     """
@@ -829,3 +997,14 @@ def long_to_wide(df, index_col, test_type_col, value_cols):
     wide.columns = [f"{val}_{test}" for val, test in wide.columns]
     wide = wide.reset_index()
     return wide
+
+
+def is_metadata_row(row,keywords):
+    keywords = [str(k).lower().strip() for k in keywords]
+    for val in row:
+        if pd.isna(val):
+            continue
+        val_str = str(val).lower().strip()
+        if val_str in keywords:
+            return True
+    return False

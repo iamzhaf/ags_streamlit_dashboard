@@ -56,7 +56,15 @@ def sort_df(df,sort_columns):
     if sort_columns:
         if "spt_n_grouping" in sort_columns:
             order = ["N≤10","10<N≤30","30<N≤50","N>50","UNKNOWN"]
+
             df["spt_n_grouping"] = pd.Categorical(df["spt_n_grouping"], categories=order, ordered=True)
+
+        if "soil_type" in sort_columns and len(sort_columns) == 1:
+
+            if "core_top" in df.columns:
+                sort_columns = ["soil_type","start_depth_of_soil_layer_m","samp_top","core_top"]
+            else:
+                sort_columns = ["soil_type","start_depth_of_soil_layer_m","samp_top"]
 
         if "bh_no" in sort_columns:
             sort_columns = ["bh_no"] + ["start_depth_of_soil_layer_m","samp_top","spt_depth_to_top_of_test"]
@@ -335,7 +343,10 @@ if "validity" in st.session_state and st.session_state["validity"] == True:
 
 if "final_merged_view_df" in st.session_state:
     if isinstance(st.session_state["final_merged_view_df"], pd.DataFrame) and not st.session_state["final_merged_view_df"].empty:
-        with st.expander("✅ Final View is ready to be downloaded"):
+
+        st.subheader("✅ Your data is ready to be downloaded")
+        
+        with st.expander("Expand to view data"):
 
             # Let user choose columns to sort by
             sort_columns = st.multiselect(
@@ -347,7 +358,7 @@ if "final_merged_view_df" in st.session_state:
             # Sort and display the DataFrame
             if sort_columns:
                 st.session_state["final_merged_view_df"] = sort_df(st.session_state["final_merged_view_df"],sort_columns)
-                st.write("### Sorted Data")
+                st.write("#### Data is successfully sorted by {}".format(" , ".join(sort_columns)))
                 st.dataframe(st.session_state["final_merged_view_df"])
 
 

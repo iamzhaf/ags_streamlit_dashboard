@@ -1,6 +1,7 @@
 from .base_transformer import BaseTransformer
 import os,sys
 import pandas as pd
+import numpy as np
 from utils import find_table_indices
 from utils import map_soil_layer_to_spt
 from utils import map_soil_specimen_to_spt
@@ -10,7 +11,9 @@ from utils import spt_n_groupings
 from utils import drop_metadata_rows
 from utils import map_sample_to_stratum
 from utils import map_core_to_stratum_layer
+from utils import map_iprm_to_stratum_layer
 import streamlit as st
+import re
 
 class AGSSgTransformer(BaseTransformer):
     """
@@ -92,6 +95,21 @@ class AGSSgTransformer(BaseTransformer):
             "TRIX" : self._join_trix,
             "IPRM" : self._join_iprm
         }
+        self.UNIT_PATTERNS = [
+                r'\bunits?\b',
+                r'^(m)$',               # Matches only if cell is exactly 'm'
+                r'^(mm)$',              # Matches only if cell is exactly 'mm'
+                r'^(cm)$',
+                r'^kN/m2$',
+                r'^kPa$',
+                r'^MPa$',
+                r'^(kg)$',
+                r'^(N)$',
+                r'^%$',                 # Only if entire cell is just '%'
+                r'^(degree)$',
+                r'^mg/m3$',
+                r'^kN$',
+            ]
 
 
     def _load_data(self, section_name):
@@ -138,6 +156,7 @@ class AGSSgTransformer(BaseTransformer):
                     sheet_name=sheet_name,
                     skiprows=skiprows,
                     usecols=usecols,
+                    header=None,
                     column_converters=column_converters
                 )
             else:
@@ -145,11 +164,62 @@ class AGSSgTransformer(BaseTransformer):
                     self.file,
                     sheet_name=sheet_name,
                     skiprows=skiprows,
-                    usecols=usecols
+                    usecols=usecols,
+                    header=None
                 )
             return df
         except Exception as e:
             return None
+
+    def _is_potential_unit_row(self, row_series):
+
+        # A row is a potential unit row if *most* of its non-empty string cells
+        # contain a unit pattern, or if certain key cells contain units.
+
+        # For the specific example of a units row right after header,
+        # it's usually indicated by a short, unit-like string in many cells.
+
+        # Strategy 1: Check if a significant number of cells contain unit patterns
+        # st.write(row_series.dropna())
+        unit_count = 0
+        total_non_empty_strings = 0
+        unit_indicator = False
+        for v in row_series.dropna():
+            if isinstance(v,str):
+
+                val_stripped = v.strip().lower().replace("<","").replace(">","")
+                total_non_empty_strings += 1
+
+            if any(re.search(pattern,val_stripped) for pattern in self.UNIT_PATTERNS):
+
+                unit_count += 1
+
+            if any(re.search(pattern,val_stripped) for pattern in [r"\bunits\b",r"\bunit\b"]):
+ 
+                unit_indicator = True
+        
+        # This threshold might need tuning. If more than X% of non-empty string cells are units, it's a unit row.
+        # Or, if at least one strong indicator (like "_UNITS_") is present.
+        # Given your screenshot, the first cell having '_UNITS_' is a strong indicator.
+        # Let's combine: if the first cell is '_UNITS_' OR a high percentage of cells are units.
+
+        outcome = unit_indicator or (total_non_empty_strings > 0 and (unit_count / total_non_empty_strings) > 0.5)
+
+        # st.write(outcome)
+        # st.write(unit_indicator)
+        # st.write(total_non_empty_strings)
+        # st.write(unit_count)
+
+        # Strong indicator from your specific screenshot:
+        if unit_indicator:
+            return True
+
+        # General heuristic: If a high percentage of non-empty string cells are units
+        # Adjust threshold based on your data. 0.5 means at least 50% of non-empty strings are unit-like.
+        if outcome:
+            return True
+
+        return False
 
 
     def _transform_raw_data(self,df,section_name):
@@ -180,34 +250,56 @@ class AGSSgTransformer(BaseTransformer):
             # get the start row, end row, start column, end column indices of the table
             start_row, end_row, start_col, end_col = find_table_indices(df, start_marker, end_marker)
 
-            columns = [str(c).replace("*","").strip().lower() for c in df.iloc[start_row, start_col:end_col+1]]
-
             # st.write(section_name)
-            # st.write(start_row,end_row,start_col,end_col)
-            # st.write(columns)
+
+            columns = [str(c).replace("*","").replace("?","").strip().lower() for c in df.iloc[start_row, start_col:end_col+1]]
+
+             # Determine the potential start of data
+            initial_data_start_row = start_row + 1
+
+            is_potential_unit_row = self._is_potential_unit_row(df.iloc[initial_data_start_row, start_col:end_col+1])
+
+            # st.write(is_potential_unit_row)
+
+            # Check the row immediately after the header for metadata
+            if initial_data_start_row < df.shape[0]: # Ensure row exists
+                potential_metadata_row_data = df.iloc[initial_data_start_row, start_col:end_col+1]
+                if is_potential_unit_row:
+                    data_start_row = initial_data_start_row + 1 # Skip this row
+                else:
+                    data_start_row = initial_data_start_row # Data starts here
+            else:
+                data_start_row = initial_data_start_row # No rows left after header
 
             if end_row is not None:
 
-                transformed_df = df.iloc[start_row+1:end_row, start_col:end_col+1]
+                transformed_df = df.iloc[data_start_row:end_row, start_col:end_col+1]
 
             if end_row is None:
 
-                transformed_df = df.iloc[start_row+1:, start_col:end_col+1]
+                transformed_df = df.iloc[data_start_row:, start_col:end_col+1]
+
+            # st.write(section_name)
+            # st.write(is_potential_unit_row)
+            # st.write(transformed_df)
          
             transformed_df.columns = columns
+
+            transformed_df = transformed_df.replace("",np.nan)
 
             # drop all columns with NaN or missing values for all rows
             transformed_df = transformed_df.dropna(axis=1,how="all")  
 
-            # drop metadata rows
-            transformed_df = drop_metadata_rows(transformed_df)
+            transformed_df = transformed_df.dropna(how="all")
 
-            # drop rows with STOP in first column
-            first_col = transformed_df.columns[0]
-            transformed_df = transformed_df[transformed_df[first_col] != "STOP"]
+            if transformed_df.shape[1] > 1 and transformed_df.shape[0] > 1:
 
-            # drop row whose row values are NaN or missing for start marker column
-            transformed_df = transformed_df.dropna(subset=start_marker.lower(),how="all")
+                # drop rows with STOP in first column
+                first_col = transformed_df.columns[0]
+                transformed_df = transformed_df[transformed_df[first_col] != "STOP"]
+
+                # drop row whose row values are NaN or missing for start marker column
+                transformed_df = transformed_df.dropna(subset=start_marker.lower(),how="all")
 
             return transformed_df
         
@@ -224,8 +316,28 @@ class AGSSgTransformer(BaseTransformer):
         # Process the raw data
         transformed_df = self._transform_raw_data(raw_df, section_name)
 
-        # reset index
-        transformed_df = transformed_df.reset_index(drop=True)
+        if isinstance(transformed_df,pd.DataFrame):
+            if transformed_df.shape[1] == 1 and transformed_df.shape[0] == 1:
+
+                transformed_df = None
+            
+            elif transformed_df.empty:
+
+                transformed_df = None
+                
+            else:
+            
+                # reset index
+                transformed_df = transformed_df.reset_index(drop=True)
+
+        else:
+
+            transformed_df = None
+
+        st.write(section_name)
+        if isinstance(transformed_df,pd.DataFrame):
+            st.write(transformed_df.shape)
+        st.write(transformed_df)
 
         return transformed_df
 
@@ -245,7 +357,13 @@ class AGSSgTransformer(BaseTransformer):
 
             transformed_df = self._load_and_process_transformed_data(s)
 
-            self.transformed_dfs[s] = transformed_df
+            if isinstance(transformed_df,pd.DataFrame):
+
+                self.transformed_dfs[s] = transformed_df
+
+            else:
+
+                continue
 
     
     def _apply_pipeline(self, df, steps):
@@ -414,9 +532,9 @@ class AGSSgTransformer(BaseTransformer):
 
             borehole_samp = self._process_samp_df(borehole_samp)
 
-            st.write("Processed Samp Data")
+            # st.write("Processed Samp Data")
 
-            st.write(borehole_samp)
+            # st.write(borehole_samp)
 
             mapped_samp_spt_df = map_soil_specimen_to_spt(soil_specimen_data=borehole_samp,
                                 spt_data=borehole_spt,
@@ -464,7 +582,10 @@ class AGSSgTransformer(BaseTransformer):
 
             df_other_tests = self._transformed_long_to_wide(df_other_tests)
 
-            df_combined = pd.merge(df_uu.loc[:,["ref_no","uu"]],df_other_tests,on="ref_no",how="outer")
+            if df_uu.empty:
+                df_combined = df_other_tests
+            else:
+                df_combined = pd.merge(df_uu.loc[:,["ref_no","uu"]],df_other_tests,on="ref_no",how="outer")
 
             df_combined = self._clean_trig_columns(df_combined)
 
@@ -736,6 +857,8 @@ class AGSSgTransformer(BaseTransformer):
 
     def _generate_sample_soil_layer_dataframes(self):
 
+        st.write(self.transformed_dfs["SAMP"])
+
         for borehole in self.transformed_dfs["HOLE"]["hole_id"].unique():
 
             df_samples = self.transformed_dfs["SAMP"][self.transformed_dfs["SAMP"]["hole_id"] == borehole.strip()]
@@ -759,6 +882,9 @@ class AGSSgTransformer(BaseTransformer):
 
             self.soil_layer_samples[borehole] = mapped_sample_stratum   
 
+            # st.write("Sample Stratum for borehole {}".format(borehole))
+            # st.write(self.soil_layer_samples[borehole])
+
             # st.write("Mapped Sample to Stratum {}".format(borehole))
             # st.write(mapped_sample_stratum)
 
@@ -768,6 +894,12 @@ class AGSSgTransformer(BaseTransformer):
         for borehole in self.transformed_dfs["HOLE"]["hole_id"].unique():
 
             df_borehole = self.boreholes_df[borehole]
+
+            if self.sample_spts[borehole] is None:
+                continue
+
+            # st.write("Sample SPT for borehole {}".format(borehole))
+            # st.write(self.sample_spts[borehole])
 
             sample_spt = self.sample_spts[borehole].dropna(subset=["spt_no"],how="all")
 
@@ -790,6 +922,13 @@ class AGSSgTransformer(BaseTransformer):
 
             df_layer_samples = self.soil_layer_samples[borehole]
 
+            # st.write("Layer Samples for borehole {}".format(borehole))
+            # st.write(df_layer_samples)
+
+            if self.sample_spts[borehole] is None:
+                
+                continue
+
             sample_spts = self.sample_spts[borehole].loc[:,["spt_no","sample_ref_no"]].dropna(subset=["spt_no"],how="all")
 
             df_layer_samples = pd.merge(
@@ -801,7 +940,7 @@ class AGSSgTransformer(BaseTransformer):
                                     indicator=True
                                     )
 
-            st.write(sample_spts)
+            # st.write(sample_spts)
 
             # fill missing sample_ref_no with ref_no using chain method
             df_layer_samples["sample_ref_no"] = df_layer_samples["sample_ref_no"].fillna(df_layer_samples["ref_no"])
@@ -823,9 +962,12 @@ class AGSSgTransformer(BaseTransformer):
 
             df_layer_samples = self.soil_layer_samples[borehole]
 
-            st.write("Layer Samples for borehole {}".format(borehole))
+            # st.write("Layer Samples for borehole {}".format(borehole))
 
-            st.write(df_layer_samples.sort_values(by=["start_depth_of_soil_layer_m"],ascending=True))   
+            # st.write(df_layer_samples.sort_values(by=["start_depth_of_soil_layer_m"],ascending=True))  
+
+            # st.write("Layer Samples for borehole {}".format(borehole))
+            # st.write(df_layer_samples) 
 
             df_layer_samples = df_layer_samples[df_layer_samples["_merge"] == "left_only"]
 
@@ -862,7 +1004,9 @@ class AGSSgTransformer(BaseTransformer):
 
             # st.write(samples.columns.tolist())
 
-            combined_df = pd.merge(combined_df,samples.loc[:,["sample_ref_no","samp_ref","samp_type","samp_top","samp_base","samp_desc","samp_rem"]],on=["sample_ref_no"],how="left")
+            samples = samples.reindex(columns=["sample_ref_no","samp_ref","samp_type","samp_top","samp_base","samp_desc","samp_rem"])
+
+            combined_df = pd.merge(combined_df,samples,on=["sample_ref_no"],how="left")
 
             # sort by stratum top then by sample top
             combined_df = combined_df.sort_values(by=["start_depth_of_soil_layer_m","samp_top","spt_depth_to_top_of_test"],ascending=[True,True,True])
@@ -1168,7 +1312,10 @@ class AGSSgTransformer(BaseTransformer):
 
             self.iprm_stratum_df[borehole] = mapped
 
+
     def _join_iprm(self):
+
+        # st.write(self.transformed_dfs["IPRM"])
 
         self._mapped_iprm_with_stratum()
 
@@ -1176,7 +1323,7 @@ class AGSSgTransformer(BaseTransformer):
 
             iprm_data = self.transformed_dfs["IPRM"][self.transformed_dfs["IPRM"]["hole_id"] == borehole]
 
-            cols_to_extract = ["iprm_testn"] + [col for col in iprm_data.columns if col.startswith("iprm_")]
+            cols_to_extract = ["iprm_tesn"] + [col for col in iprm_data.columns if col.startswith("iprm_") and col != "iprm_tesn"]
 
             iprm_data = iprm_data[cols_to_extract]
 
@@ -1184,15 +1331,21 @@ class AGSSgTransformer(BaseTransformer):
 
             mapped_iprm_stratum = mapped_iprm_stratum.rename(columns={"matched_stratum_id": "stratum_id"})
 
-            combined = pd.merge(self.boreholes_df[borehole],mapped_iprm_stratum.loc[:,["iprm_testn","stratum_id"]],on=["sample_ref_no"],how="left")
+            # st.write(iprm_data)
 
-            combined = pd.merge(combined,iprm_data,on=["sample_ref_no"],how="left")
+            # st.write(mapped_iprm_stratum)
+
+            combined = pd.merge(self.boreholes_df[borehole],mapped_iprm_stratum.loc[:,["iprm_tesn","stratum_id"]],on=["stratum_id"],how="left")
+
+            # st.write(combined)
+
+            combined = pd.merge(combined,iprm_data,on=["iprm_tesn"],how="left")
 
             self.boreholes_df[borehole] = combined
 
-            st.write("Completed Joining IPRM Data for borehole: ",borehole)
+            # st.write("Completed Joining IPRM Data for borehole: ",borehole)
 
-            st.write(self.boreholes_df[borehole])
+            # st.write(self.boreholes_df[borehole])
 
 
     def extract_data(self):
@@ -1216,11 +1369,11 @@ class AGSSgTransformer(BaseTransformer):
             # process stratum dataframes
             self._transformed_stratum_data()
 
-            st.write("Processed GEOL Data")
+            # st.write("Processed GEOL Data")
 
-            st.write(self.transformed_dfs["GEOL"])
+            # st.write(self.transformed_dfs["GEOL"])
 
-            st.write(self.transformed_dfs["SAMP"])
+            # st.write(self.transformed_dfs["SAMP"])
 
             # generate spt and soil layer dataframes
             self._generate_spt_soil_layer_dataframes()
@@ -1231,12 +1384,12 @@ class AGSSgTransformer(BaseTransformer):
             # join all samples
             self._generate_sample_soil_layer_dataframes()
 
-            st.write("Generated Sample Soil Layer Dataframes")
+            # st.write("Generated Sample Soil Layer Dataframes")
             
             # generate sample spt dataframes
             self._generate_samp_spt_dataframes()
 
-            st.write("generated sample spt dataframes")
+            # st.write("generated sample spt dataframes")
 
             # join layer_sample with sample_spt
             self._join_layer_sample_with_sample_spt()

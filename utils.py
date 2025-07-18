@@ -356,8 +356,6 @@ def map_stratum_layer_to_rock_samples(stratum_layer_data,rock_samples_data,strat
                     'geol_base': []
                 })
 
-
-
 def map_core_to_stratum_layer(core_data,stratum_layer_data,stratum_id="stratum_id",stratum_layer_depth_col="depth_to_top_of_test",end_stratum_layer_depth_col="depth_to_top_of_test"):
     
     results = []
@@ -389,6 +387,38 @@ def map_core_to_stratum_layer(core_data,stratum_layer_data,stratum_id="stratum_i
                     'core_top': [],
                     'core_base': [],
                     'core_ref_no': []
+                })
+
+
+def map_iprm_to_stratum_layer(iprm_data,stratum_layer_data,stratum_id="stratum_id",stratum_layer_depth_col="depth_to_top_of_test",end_stratum_layer_depth_col="depth_to_top_of_test"):
+    
+    results = []
+
+    for d_from, d_to,stratum_id in zip(
+        stratum_layer_data[stratum_layer_depth_col],
+        stratum_layer_data[end_stratum_layer_depth_col],
+        stratum_layer_data[stratum_id],
+    ):
+        for iprm_top,iprm_testn in zip(
+            iprm_data['iprm_top'],
+            iprm_data['iprm_tesn'],
+        ):
+            if (d_from <= iprm_top) and (iprm_top < d_to):
+                results.append({
+                    'matched_stratum_id':   stratum_id,
+                    'iprm_top': iprm_top,
+                    'iprm_tesn': iprm_testn,
+                })
+    if results:
+
+        return pd.DataFrame(results)
+
+    else:
+
+        return pd.DataFrame({
+                    'matched_stratum_id': [],
+                    'iprm_top': [],
+                    'iprm_tesn': []
                 })
 
 

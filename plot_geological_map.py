@@ -6,6 +6,7 @@ from folium.raster_layers import ImageOverlay
 from folium.plugins import MarkerCluster
 from PIL import Image
 import socket
+import streamlit as st
 
 def display_geological_map_with_boreholes(
     boreholes_coor_df,
@@ -16,10 +17,17 @@ def display_geological_map_with_boreholes(
     map_height=1000,
     checkbox_default=False
 ):
-    boreholes = boreholes_coor_df.to_dict(orient='records')
+    # Remove duplicates 
+    boreholes = boreholes_coor_df.drop_duplicates().reset_index(drop=True)
+
+    # Remove null values
+    boreholes = boreholes.dropna(subset=["lat","lon"],how="all")
+    boreholes = boreholes.to_dict(orient='records')
+
     # Get local IP address for tile serving
     hostname = socket.gethostname()
     ip_add = socket.gethostbyname(hostname)
+
 
     # find the centeroid
     lats = [float(bh["lat"]) for bh in boreholes]
@@ -31,7 +39,7 @@ def display_geological_map_with_boreholes(
     m = folium.Map(location=map_center, zoom_start=zoom_start, tiles="OpenStreetMap")
     
     tiles_config = ("{z}","{x}","{y}")
-    geology_tile_url = f"http://{ip_add}:8000/{tiles_config[0]}/{tiles_config[1]}/{tiles_config[2]}.png"
+    geology_tile_url = f"http://{ip_add}:8080/{tiles_config[0]}/{tiles_config[1]}/{tiles_config[2]}.png"
     
     geology_tiles = folium.TileLayer(
         tiles=geology_tile_url,

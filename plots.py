@@ -4,6 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import base64
 import numpy as np
+from pyarrow import float16
+import streamlit as st
+import re
 
 def get_base64_image(image_path):
     with open(image_path, "rb") as image_file:
@@ -24,7 +27,16 @@ def plot_plasticity_index_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
     df = df.copy()
+    # Remove duplicates to ensure clean plotting data
+
+    df = df.drop_duplicates(subset=[ll_col, pl_col, depth_col])
+
+    # convert to numerical
+    for c in [ll_col, pl_col, depth_col]:
+        df[c] = pd.to_numeric(df[c],errors='coerce')
+
     df.dropna(subset=[ll_col, pl_col, depth_col], inplace=True)
+
     df['pi'] = df[ll_col] - df[pl_col]
 
     if df["pi"].min() < 0:
@@ -38,7 +50,7 @@ def plot_plasticity_index_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
         y=depth_col,
         hover_data=['bh_no', 'sample_ref_no',"atterberg_limit_%_ll_%","atterberg_limit_%_pl_%"],
         labels={
-            "soil_layer" : "Soil Type",
+            "soil_type" : "Soil Type",
             "spt_n_grouping" : "SPT-N Value (Blow Count)",
             'pi': 'Plasticity Index (%)',
             "atterberg_limit_%_ll_%":"LL",
@@ -48,7 +60,7 @@ def plot_plasticity_index_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
             "sample_ref_no":"Sample Ref. No.",
         },
         color_discrete_sequence=px.colors.qualitative.Set1,
-        color = "soil_layer",
+        color = "soil_type",
         symbol="spt_n_grouping"
     )
 
@@ -105,7 +117,7 @@ def plot_plasticity_index_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
         minor=dict(
                     tick0=0,
                     dtick=2,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -118,12 +130,12 @@ def plot_plasticity_index_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
         dtick=2,
         gridcolor="black",
         zeroline=True,
-        zerolinewidth=3,
+        zerolinewidth=1,
         zerolinecolor="black",
         minor=dict(
                     tick0=0,
                     dtick=1,         # Minor grid every 1 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -151,9 +163,15 @@ def plot_undrained_shear_strength_plotly(df, uu_col='uu', depth_col='depth', tit
     Returns:
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
-    empty_data = False
 
     df = df.copy()
+
+    # Remove duplicates to ensure clean plotting data
+    df = df.drop_duplicates(subset=[uu_col, depth_col])
+
+    empty_data = False
+
+    
     df = df.dropna(subset=[uu_col, depth_col])
     
     if not len(df) >0:
@@ -165,7 +183,7 @@ def plot_undrained_shear_strength_plotly(df, uu_col='uu', depth_col='depth', tit
         y=depth_col,
         hover_data=['bh_no', 'sample_ref_no','uu'],
         labels={
-            "soil_layer" : "Soil Type",
+            "soil_type" : "Soil Type",
             "spt_n_grouping" : "SPT-N Value (Blow Count)",
             uu_col: 'Undrained Shear Strength (kPa)',
             depth_col: 'Sample Depth (mBGL)',
@@ -173,7 +191,7 @@ def plot_undrained_shear_strength_plotly(df, uu_col='uu', depth_col='depth', tit
             "sample_ref_no":"Sample Ref. No.",
         },
         color_discrete_sequence=px.colors.qualitative.Set1,
-        color = "soil_layer",
+        color = "soil_type",
         symbol="spt_n_grouping"
     )
 
@@ -230,9 +248,9 @@ def plot_undrained_shear_strength_plotly(df, uu_col='uu', depth_col='depth', tit
         minor=dict(
                     tick0=0,
                     dtick=2,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
-                    gridwidth=0.5
+                    gridwidth=0.1
                 )
     ),
     yaxis=dict(
@@ -243,14 +261,14 @@ def plot_undrained_shear_strength_plotly(df, uu_col='uu', depth_col='depth', tit
         dtick=2,
         gridcolor="black",
         zeroline=True,
-        zerolinewidth=3,
+        zerolinewidth=1,
         zerolinecolor="black",
         minor=dict(
                     tick0=0,
                     dtick=1,         # Minor grid every 1 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
-                    gridwidth=0.5
+                    gridwidth=0.1
                 )
     ),
         plot_bgcolor="#f9f9f9",
@@ -277,9 +295,15 @@ def plot_undrained_shear_strength_sptn_plotly(df, uu_col='uu', spt_n='spt_n', ti
     Returns:
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
-    empty_data = False
 
     df = df.copy()
+
+    # Remove duplicates to ensure clean plotting data
+    df = df.drop_duplicates(subset=[uu_col, spt_n])
+
+    empty_data = False
+
+    
     df = df.dropna(subset=[uu_col, spt_n])
     
     if not len(df) >0:
@@ -291,7 +315,7 @@ def plot_undrained_shear_strength_sptn_plotly(df, uu_col='uu', spt_n='spt_n', ti
         y=uu_col,
         hover_data=['bh_no', 'sample_ref_no','uu'],
         labels={
-            "soil_layer" : "Soil Type",
+            "soil_type" : "Soil Type",
             "spt_n_grouping" : "SPT-N Value Grouping",
             uu_col: 'Undrained Shear Strength (kPa)',
             spt_n: 'SPTN-N Value',
@@ -299,7 +323,7 @@ def plot_undrained_shear_strength_sptn_plotly(df, uu_col='uu', spt_n='spt_n', ti
             "sample_ref_no":"Sample Ref. No.",
         },
         color_discrete_sequence=px.colors.qualitative.Set1,
-        color = "soil_layer",
+        color = "soil_type",
         symbol="spt_n_grouping"
     )
 
@@ -346,7 +370,7 @@ def plot_undrained_shear_strength_sptn_plotly(df, uu_col='uu', spt_n='spt_n', ti
         minor=dict(
                     tick0=0,
                     dtick=5,         # Minor grid every 5 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -359,12 +383,12 @@ def plot_undrained_shear_strength_sptn_plotly(df, uu_col='uu', spt_n='spt_n', ti
         dtick=10,
         gridcolor="black",
         zeroline=True,
-        zerolinewidth=3,
+        zerolinewidth=1,
         zerolinecolor="black",
         minor=dict(
                     tick0=0,
                     dtick=5,         # Minor grid every 1 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -392,7 +416,13 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
     Returns:
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
+
+
     df = df.copy()
+
+    # Remove duplicates to ensure clean plotting data
+    df = df.drop_duplicates(subset=[specific_gravity, depth_col])
+
     df.dropna(subset=[specific_gravity, depth_col], inplace=True)
 
     fig = px.scatter(
@@ -401,7 +431,7 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
         y=depth_col,
         hover_data=['bh_no', 'sample_ref_no'],
         labels={
-            "soil_layer" : "Soil Type",
+            "soil_type" : "Soil Type",
             "spt_n_grouping" : "SPT-N Value (Blow Count)",
             specific_gravity: 'Specific Gravity',
             depth_col: 'Sample Depth (mBGL)',
@@ -409,7 +439,7 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
             "sample_ref_no":"Sample Ref. No.",
         },
         color_discrete_sequence=px.colors.qualitative.Set1,
-        color = "soil_layer",
+        color = "soil_type",
         symbol="spt_n_grouping"
     )
 
@@ -434,7 +464,7 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
         xanchor="left",
         x=0                 # centered horizontally
     ),
-         shapes=[
+    shapes=[
         dict(
             type='line',
             xref='x',
@@ -443,7 +473,7 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
             x1=0,
             y0=0-0.5,
             y1=df[depth_col].max()+1,
-            line=dict(color='black', width=1, dash='solid')
+            line=dict(color='black', width=0.5, dash='solid')
         ),
         dict(
             type='line',
@@ -453,7 +483,7 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
             x1=10,
             y0=df[depth_col].max()+1,
             y1=df[depth_col].max()+1,
-            line=dict(color='black', width=1, dash='solid')
+            line=dict(color='black', width=0.5, dash='solid')
         )
     ],
     xaxis=dict(
@@ -466,7 +496,7 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
         minor=dict(
                     tick0=0,
                     dtick=0.2,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -479,12 +509,12 @@ def plot_partical_density_plotly(df, specific_gravity="specific_gravity", depth_
         dtick=2,
         gridcolor="black",
         zeroline=True,
-        zerolinewidth=3,
+        zerolinewidth=1,
         zerolinecolor="black",
         minor=dict(
                     tick0=0,
                     dtick=1,         # Minor grid every 1 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -512,7 +542,12 @@ def plot_bulk_density_plotly(df, bulk_density="bulk_density", depth_col='depth',
     Returns:
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
+
+
     df = df.copy()
+    # Remove duplicates to ensure clean plotting data
+    df = df.drop_duplicates(subset=[bulk_density, depth_col])
+
     df.dropna(subset=[bulk_density, depth_col], inplace=True)
 
     fig = px.scatter(
@@ -521,7 +556,7 @@ def plot_bulk_density_plotly(df, bulk_density="bulk_density", depth_col='depth',
         y=depth_col,
         hover_data=['bh_no', 'sample_ref_no'],
         labels={
-            "soil_layer" : "Soil Type",
+            "soil_type" : "Soil Type",
             "spt_n_grouping" : "SPT-N Value (Blow Count)",
             bulk_density: 'Bulk Density',
             depth_col: 'Sample Depth (mBGL)',
@@ -529,7 +564,7 @@ def plot_bulk_density_plotly(df, bulk_density="bulk_density", depth_col='depth',
             "sample_ref_no":"Sample Ref. No.",
         },
         color_discrete_sequence=px.colors.qualitative.Set1,
-        color = "soil_layer",
+        color = "soil_type",
         symbol="spt_n_grouping"
     )
 
@@ -586,7 +621,7 @@ def plot_bulk_density_plotly(df, bulk_density="bulk_density", depth_col='depth',
         minor=dict(
                     tick0=0,
                     dtick=0.2,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -599,12 +634,12 @@ def plot_bulk_density_plotly(df, bulk_density="bulk_density", depth_col='depth',
         dtick=2,
         gridcolor="black",
         zeroline=True,
-        zerolinewidth=3,
+        zerolinewidth=1,
         zerolinecolor="black",
         minor=dict(
                     tick0=0,
                     dtick=1,         # Minor grid every 1 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -633,7 +668,17 @@ def plot_plasticity_chart_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
     Returns:
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
+
     df = df.copy()
+
+    # Remove duplicates to ensure clean plotting data
+    df = df.drop_duplicates(subset=[ll_col, pl_col, depth_col])
+
+
+    # convert to numerical
+    for c in [ll_col, pl_col, depth_col]:
+        df[c] = pd.to_numeric(df[c],errors='coerce')
+
     df.dropna(subset=[ll_col, pl_col, depth_col], inplace=True)
     df['pi'] = df[ll_col] - df[pl_col]
 
@@ -660,7 +705,7 @@ def plot_plasticity_chart_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
         y="pi",
         hover_data=['bh_no', 'sample_ref_no',"atterberg_limit_%_ll_%","atterberg_limit_%_pl_%"],
         labels={
-            "soil_layer" : "Soil Type",
+            "soil_type" : "Soil Type",
             "spt_n_grouping" : "SPT-N Value (Blow Count)",
             'pi': 'Plasticity Index (%)',
             "atterberg_limit_%_ll_%":"LL",
@@ -670,7 +715,7 @@ def plot_plasticity_chart_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
             "sample_ref_no":"Sample Ref. No.",
         },
         color_discrete_sequence=px.colors.qualitative.Set1,
-        color = "soil_layer",
+        color = "soil_type",
         symbol="spt_n_grouping"
     )
     fig.add_trace(go.Scatter(x=ll_full, y=pi_full,name='A-Line', mode='lines', line=dict(color='black')))
@@ -718,7 +763,7 @@ def plot_plasticity_chart_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
                 minor=dict(
                     tick0=0,
                     dtick=2,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -735,7 +780,7 @@ def plot_plasticity_chart_plotly(df, ll_col='ll', pl_col='pl', depth_col='depth'
         minor=dict(
                     tick0=0,
                     dtick=2,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -763,7 +808,12 @@ def plot_spt_n_vs_sample_depth_plotly(df, spt_n='spt_n', depth_col='spt_depth_to
     Returns:
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
+
     df = df.copy()
+
+    # Remove duplicates to ensure clean plotting data
+    df = df.drop_duplicates(subset=[spt_n, depth_col])
+
     df.dropna(subset=[spt_n,depth_col], inplace=True)
 
     fig = px.scatter(
@@ -772,14 +822,14 @@ def plot_spt_n_vs_sample_depth_plotly(df, spt_n='spt_n', depth_col='spt_depth_to
         y=depth_col,
         hover_data=['bh_no',"spt_n"],
         labels={
-            "soil_layer" : "Soil Type",
+            "soil_type" : "Soil Type",
             "spt_n_grouping" : "SPT-N Group",
             'spt_n': 'SPT-N Value (Blow Count)',
             depth_col: 'SPT Depth (mBGL)',
             'bh_no':"Borehole Number"
         },
         color_discrete_sequence=px.colors.qualitative.Set1,
-        color = "soil_layer",
+        color = "soil_type",
         symbol="spt_n_grouping"
     )
 
@@ -836,7 +886,7 @@ def plot_spt_n_vs_sample_depth_plotly(df, spt_n='spt_n', depth_col='spt_depth_to
                 minor=dict(
                     tick0=0,
                     dtick=5,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -849,12 +899,12 @@ def plot_spt_n_vs_sample_depth_plotly(df, spt_n='spt_n', depth_col='spt_depth_to
         dtick=2,
         gridcolor="lightgrey",
         zeroline=True,
-        zerolinewidth=3,
+        zerolinewidth=1,
         zerolinecolor="black",
         minor=dict(
                     tick0=0,
                     dtick=1,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -882,6 +932,12 @@ def plot_borehole_mapping(df, lat='latitude', lon='longtitude', title="Borehole 
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
 
+    df_plot = df.copy()
+
+    # Remove duplicates to ensure clean plotting data
+    df_plot = df.drop_duplicates(subset=[lat, lon, 'hole_id'])
+
+    
     # Get base64 string of your image
     # img_path = "assets/borehole.png" 
     #base64_str = get_base64_image(img_path)
@@ -889,7 +945,7 @@ def plot_borehole_mapping(df, lat='latitude', lon='longtitude', title="Borehole 
 
     # Use a light-themed map and highlight boreholes in yellow
     fig_map = px.scatter_mapbox(
-        df,
+        df_plot,
         lat=lat,
         lon=lon,
         color_discrete_sequence=["black"],  # All boreholes appear yellow
@@ -915,7 +971,7 @@ def plot_borehole_mapping(df, lat='latitude', lon='longtitude', title="Borehole 
 
 
 
-def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col='pl', depth_col='sample_depth',title=""):
+def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col='pl', depth_col='sample_top',title=""):
     """
     Returns a modern-looking Plotly scatter plot for MC within PL-LL range against sample depth.
     
@@ -929,8 +985,18 @@ def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col=
     Returns:
         fig (plotly.graph_objs._figure.Figure): Plotly figure object.
     """
+
     df = df.copy()
+
+    # Remove duplicates to ensure clean plotting data
+    df = df.drop_duplicates(subset=[mc_col, ll_col, pl_col, depth_col])
+
+    # convert to numerical
+    for c in [mc_col, ll_col, pl_col, depth_col]:
+        df[c] = pd.to_numeric(df[c],errors='coerce')
+
     df.dropna(subset=[mc_col,ll_col,pl_col], how='all', inplace=True)
+
     # Sort by depth to create nice spacing
     df = df.sort_values(by=[depth_col],ascending=True)
 
@@ -985,7 +1051,7 @@ def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col=
         "Moisture Content (%)=%{x}<br>" +
         "Sample Depth (mBGL)=%{y}<br>" +
         "Soil Type=%{customdata[3]}<extra></extra>",
-        customdata=df[["bh_no", "spt_n_grouping", "spt_n", "soil_layer"]]
+        customdata=df[["bh_no", "spt_n_grouping", "spt_n", "soil_type"]]
     ))
 
     fig.update_xaxes(
@@ -1014,7 +1080,7 @@ def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col=
         minor=dict(
                     tick0=0,
                     dtick=2,         # Minor grid every 2 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -1029,7 +1095,7 @@ def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col=
         minor=dict(
                     tick0=0,
                     dtick=1,         # Minor grid every 1 units
-                    showgrid=True,   # ✅ Turn on minor gridlines
+                    showgrid=True,   # Turn on minor gridlines
                     gridcolor="lightgray",
                     gridwidth=0.5
                 )
@@ -1044,14 +1110,14 @@ def plot_moisture_content_pl_ll_range_plotly(df,mc_col="mc",ll_col='ll', pl_col=
     return fig
 
 
-def plot_soil_thickness_across_boreholes(df,soil_top_col="soil_layer_start_depth_m",soil_bottom_col="soil_layer_end_depth_m",title=""):
+def plot_soil_thickness_across_boreholes(df,soil_top_col="soil_type_start_depth_m",soil_bottom_col="soil_type_end_depth_m",title=""):
 
     df["soil_thickness"] = df[soil_bottom_col] - df[soil_top_col]
 
     
     df["Label"] = df["soil_thickness"].round(1).astype(str) + " m"
 
-    grouped = df.groupby(["soil_layer"]).agg({"soil_thickness":"sum"}).sort_values(["soil_thickness"],ascending=False)
+    grouped = df.groupby(["soil_type"]).agg({"soil_thickness":"sum"}).sort_values(["soil_thickness"],ascending=False)
 
 
     grouped["Label"] = grouped["soil_thickness"].round(1).astype(str) + " m"
@@ -1072,7 +1138,7 @@ def plot_soil_thickness_across_boreholes(df,soil_top_col="soil_layer_start_depth
     )
     fig.update_layout(
     xaxis=dict(
-        title="Soil Layer",
+        title="Soil Type",
         title_font=dict(size=18, family="Arial", color="black"),  # bold & bigger
         tickfont=dict(size=14)
     ),
@@ -1081,7 +1147,6 @@ def plot_soil_thickness_across_boreholes(df,soil_top_col="soil_layer_start_depth
         title_font=dict(size=18, family="Arial", color="black"),
         tickfont=dict(size=14),
         showgrid=True,
-        dtick=50,
         gridcolor="lightgrey"
     ),
         plot_bgcolor="#f9f9f9",
@@ -1089,6 +1154,154 @@ def plot_soil_thickness_across_boreholes(df,soil_top_col="soil_layer_start_depth
         font=dict(size=14),
         height=450,
         margin=dict(l=80, r=60, t=40, b=80),  # Increase these as needed
+    )
+
+    return fig
+
+
+def plot_custom_scatter_plotly(df, x_col, y_col, color_col=None):
+    """
+    Returns a modern-looking Plotly scatter plot for user-defined X and Y columns.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame containing the data.
+        x_col (str): Column name for the X-axis.
+        y_col (str): Column name for the Y-axis.
+        color_col (str, optional): Column name to use for color-coding points. Defaults to None.
+
+    Returns:
+        fig (plotly.graph_objs._figure.Figure): Plotly figure object.
+    """
+    if df is None or df.empty or not x_col or not y_col:
+        fig = go.Figure()
+        fig.update_layout(title_text="Please select columns for both X and Y axes.", xaxis_visible=False, yaxis_visible=False)
+        return fig
+
+    # Make a copy to avoid modifying the original DataFrame
+    df_plot = df.copy()
+
+    # Drop rows where the selected columns have NaN values
+    subset_cols = [x_col, y_col]
+    if color_col:
+        subset_cols.append(color_col)
+    else:
+        color_col = "soil_type"
+        subset_cols.append(color_col)
+        
+    df_plot.dropna(subset=subset_cols, inplace=True)
+
+    # Remove duplicates
+    df_plot = df_plot.drop_duplicates(subset=[x_col,y_col])
+
+    # Attempt to convert columns to numeric, coercing errors
+    df_plot[x_col] = pd.to_numeric(df_plot[x_col], errors='coerce')
+    df_plot[y_col] = pd.to_numeric(df_plot[y_col], errors='coerce')
+
+
+    # Drop rows that couldn't be converted to numeric in x or y
+    df_plot.dropna(subset=[x_col, y_col], inplace=True)
+
+
+    st.write(df_plot)
+
+    # Define regex pattern (case-insensitive)
+    pattern = re.compile(r'top|depth', re.IGNORECASE)
+
+
+
+    # Filter matching columns
+    matched_cols = [col for col in [y_col] if pattern.search(col)]
+
+    range_y = None
+
+    # if len(matched_cols) > 0:
+
+    #     # Essentially sort by depth
+    #     df_plot.sort_values(by=matched_cols[0], inplace=True, ascending=True)
+
+    #     df_plot = df_plot.reset_index(drop=True)
+
+    #     st.write(df_plot.tail())
+
+    #     st.write(df_plot[x_col].max())
+
+    #     max_depth = df_plot[y_col].max()
+
+    #     range_y = [max_depth+10,0-0.5]
+    
+    if df_plot.empty:
+        fig = go.Figure()
+        fig.update_layout(title_text=f"No valid numeric data to plot for {y_col} vs {x_col}.", xaxis_visible=False, yaxis_visible=False)
+        return fig
+
+    # Create the scatter plot
+    title = f"{y_col} vs. {x_col}"
+    hover_data = ['hole_id'] if 'hole_id' in df_plot.columns else None
+
+    # if range_y:
+    #     st.write(range_y)
+    #     st.write(depth_of_max_x)
+
+    st.write(df_plot.loc[:,[x_col,y_col]])
+
+    fig = px.scatter(
+        df_plot,
+        x=x_col,
+        y=y_col,
+        color=color_col,
+        title=title,
+        hover_data=hover_data,
+        color_discrete_sequence=px.colors.qualitative.Set1,
+        symbol="spt_n_grouping",
+        # mode="markers+text"
+    )
+
+    if range_y:
+        fig.update_yaxes(range=range_y)
+
+    fig.update_traces(marker=dict(size=10, opacity=0.9, line=dict(width=1, color='DarkSlateGrey')))
+
+
+    # Customize layout for a professional look
+    fig.update_layout(
+        legend_title = dict(
+                            text="{} & SPT-N Grouping".format(color_col.replace('_', ' ').title()),
+                            font=dict(size=16)
+                        ),
+        legend = dict(
+            font=dict(size=14),
+            orientation="h",         # horizontal legend
+            yanchor="bottom",
+            y=1.02,                  # slightly above the plot
+            xanchor="left",
+            x=0                 # centered horizontally
+        ),
+        xaxis=dict(
+                    title="{}".format(x_col.replace('_', ' ').upper()),
+                    title_font=dict(size=18, family="Arial", color="black"),
+                    tickfont=dict(size=14),
+                    showgrid=True,
+                    gridcolor="black",
+                    ),
+        yaxis=dict(
+                    title="{}".format(y_col.replace('_', ' ').upper()),
+                    title_font=dict(size=18, family="Arial", color="black"),
+                    tickfont=dict(size=14),
+                    showgrid=True,
+                    gridcolor="black",
+                    ),
+        title={
+                    'font' : dict(size=24, family="Arial", color="black"),
+                    'y': 0.98, 
+                    'x': 0.5, 
+                    'xanchor': 'center', 
+                    'yanchor': 'top'
+                    },
+        plot_bgcolor="#f9f9f9",
+        paper_bgcolor="#ffffff",
+        font=dict(size=14),
+        height=800,
+        margin=dict(l=80, r=60, t=130, b=80),  # Increase these as needed
     )
 
     return fig

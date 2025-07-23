@@ -16,7 +16,8 @@ from plots import plot_soil_thickness_across_boreholes
 from utils import export_plotly_charts_to_pdf
 from plot_geological_map import display_geological_map_with_boreholes
 import re
-
+import numpy as np
+from plots import plot_custom_scatter_plotly
 
 st.title("Borehole & Geotechnical Analysis Dashboard")
 
@@ -218,7 +219,7 @@ if "df" in locals():
     if "Soil Thickness" in selected_charts:
         col_2.subheader("Cumulative Soil Layer Thickness Profile (Site-Wide)")
         try:
-            fig = plot_soil_thickness_across_boreholes(df, soil_top_col="soil_layer_start_depth_m",soil_bottom_col="soil_layer_end_depth_m",title="")
+            fig = plot_soil_thickness_across_boreholes(df, soil_top_col="start_depth_of_soil_layer_m",soil_bottom_col="end_depth_of_soil_layer_m",title="")
             col_2.plotly_chart(fig, use_container_width=False)
         except Exception as e:
             col_2.error(f"Error plotting Soil Thickness: {e}")
@@ -236,7 +237,7 @@ if "boreholes_coor_df" in st.session_state:  # make sure df exists
 if "df" in locals(): # make sure df exists
 
     # Step 1: Extract unique filter options
-    soil_layer_options = df['soil_layer'].dropna().unique().tolist()
+    soil_layer_options = df['soil_type'].dropna().unique().tolist()
     spt_group_options = df['spt_n_grouping'].dropna().unique().tolist()
 
     # Step 2: Create dropdowns
@@ -248,7 +249,7 @@ if "df" in locals(): # make sure df exists
 
     if set(selected_soils) != set(soil_layer_options):
         pattern = "|".join([re.escape(s) for s in selected_soils])
-        filtered_df = filtered_df[filtered_df["soil_layer"].fillna("").str.contains(pattern, regex=True)]
+        filtered_df = filtered_df[filtered_df["soil_type"].fillna("").str.contains(pattern, regex=True)]
 
     if set(selected_spt_groups) != set(spt_group_options):
         pattern = "|".join([re.escape(s) for s in selected_spt_groups])
@@ -269,6 +270,34 @@ figures_subheader_spt_n_placeholders = []
 
 export_placeholder = col_1.empty()  # Create a placeholder at the top
 
+
+if "df" in locals():  # make sure df exists
+    # --- Custom Plotting Section ---
+    with col_2:
+        st.markdown("### Custom Scatter Plot")
+        st.write("Select columns from the consolidated data to plot against each other. Only numeric columns will be plotted.")
+
+        # Get numeric columns for user selection
+        numeric_cols = filtered_df.select_dtypes(include=np.number).columns.tolist()
+        all_cols = filtered_df.columns.tolist()
+
+        sub_col1, sub_col2, sub_col3 = st.columns(3)
+        with sub_col1:
+            x_axis = st.selectbox("Select X-Axis", options=numeric_cols, index=None, placeholder="Choose a column")
+        with sub_col2:
+            y_axis = st.selectbox("Select Y-Axis", options=numeric_cols, index=None, placeholder="Choose a column")
+        with sub_col3:
+            color_axis = st.selectbox("Select Color Category (Optional)", options=[None] + all_cols, index=0)
+
+        if x_axis and y_axis:
+            st.write(filtered_df.head())
+            custom_plot_fig = plot_custom_scatter_plotly(filtered_df, x_col=x_axis, y_col=y_axis, color_col=color_axis)
+            col_2.plotly_chart(custom_plot_fig,use_container_width=False)
+        else:
+            col_2.info("Please select columns for both X and Y axes to generate a plot.")
+
+
+
 if "df" in locals():  # make sure df exists
 
     if "Plasticity Index Vs Depth" in selected_charts:
@@ -278,7 +307,7 @@ if "df" in locals():  # make sure df exists
         col_2.markdown(f"###### {sub_header_text_spt_n_selection}")
         # Filter based on soil type 
         try:
-            fig = plot_plasticity_index_plotly(filtered_df, ll_col='atterberg_limit_%_ll_%', pl_col='atterberg_limit_%_pl_%', depth_col='sample_depth')
+            fig = plot_plasticity_index_plotly(filtered_df, ll_col='atterberg_limit_%_ll_%', pl_col='atterberg_limit_%_pl_%', depth_col='samp_top')
             
             col_2.plotly_chart(fig, use_container_width=False)
 
@@ -301,7 +330,7 @@ if "df" in locals():  # make sure df exists
         col_2.markdown(f"###### {sub_header_text_spt_n_selection}")
         # Filter based on soil type 
         try:
-            fig = plot_plasticity_chart_plotly(filtered_df, ll_col='atterberg_limit_%_ll_%', pl_col='atterberg_limit_%_pl_%', depth_col='sample_depth')
+            fig = plot_plasticity_chart_plotly(filtered_df, ll_col='atterberg_limit_%_ll_%', pl_col='atterberg_limit_%_pl_%', depth_col='samp_top')
             
             col_2.plotly_chart(fig, use_container_width=False)
 
@@ -357,7 +386,7 @@ if "df" in locals():  # make sure df exists
         try:
             fig = plot_moisture_content_pl_ll_range_plotly(filtered_df_mc,mc_col="water_content_%",ll_col="atterberg_limit_%_ll_%"
                                                            ,pl_col="atterberg_limit_%_pl_%",
-                                                           depth_col='sample_depth')
+                                                           depth_col='samp_top')
             
             col_2.plotly_chart(fig, use_container_width=False)
 
@@ -378,7 +407,7 @@ if "df" in locals():  # make sure df exists
         col_2.markdown(f"###### {sub_header_text_soil_layer_selection}")
         col_2.markdown(f"###### {sub_header_text_spt_n_selection}")
         try:
-            fig = plot_partical_density_plotly(filtered_df,specific_gravity="partical_density",depth_col='sample_depth')
+            fig = plot_partical_density_plotly(filtered_df,specific_gravity="partical_density",depth_col='samp_top')
             
             col_2.plotly_chart(fig, use_container_width=False)
 
@@ -398,7 +427,7 @@ if "df" in locals():  # make sure df exists
         col_2.markdown(f"###### {sub_header_text_soil_layer_selection}")
         col_2.markdown(f"###### {sub_header_text_spt_n_selection}")
         try:
-            fig = plot_bulk_density_plotly(filtered_df,bulk_density='bulk_density_mg_m3',depth_col='sample_depth')
+            fig = plot_bulk_density_plotly(filtered_df,bulk_density='bulk_density_mg_m3',depth_col='samp_top')
             
             col_2.plotly_chart(fig, use_container_width=False)
 
@@ -418,7 +447,7 @@ if "df" in locals():  # make sure df exists
         col_2.markdown(f"###### {sub_header_text_soil_layer_selection}")
         col_2.markdown(f"###### {sub_header_text_spt_n_selection}")
         try:
-            fig,empty_data = plot_undrained_shear_strength_plotly(filtered_df,uu_col="uu",depth_col='sample_depth')
+            fig,empty_data = plot_undrained_shear_strength_plotly(filtered_df,uu_col="uu",depth_col='samp_top')
             #col_2.write(empty_data)
 
             if not empty_data:
@@ -487,3 +516,6 @@ if figures_list_placehoder:
                     )
         except Exception as e:
             st.error(f"❌ Export failed: {e}")
+
+
+

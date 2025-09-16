@@ -12,6 +12,7 @@ from ags_transformers.ryo_engineering import RyoEngineeringTransformer
 from ags_transformers.ags_sg import AGSSgTransformer
 import json
 from utils import map_soil_layer_to_spt
+import io
 
 borehole_html_table = None
 
@@ -47,8 +48,80 @@ def create_final_view_df(final_views_dfs):
 
 
 @st.cache_data
-def convert_for_download(df):
-    return df.to_csv(index=False).encode("utf-8-sig")
+def convert_for_download(df,sort_columns):
+
+    st.write(sort_columns)
+
+    split_dfs = {}
+
+    # ✅ Add the full DataFrame first as 'MASTER'
+    split_dfs["MASTER"] = df.reset_index(drop=True)
+
+    if "bh_no" in sort_columns:
+        for cat, group_df in df.groupby(['bh_no'], dropna=False):
+
+            key = f"{cat or 'UNCLASSIFIED_BOREHOLE_NUMBER'}"
+            
+            split_dfs[key] = group_df.reset_index(drop=True)
+
+
+    if ("soil_type" in sort_columns) and ("spt_n_grouping" not in sort_columns):
+        for cat, group_df in df.groupby(['soil_type'], dropna=False):
+
+            if pd.isna(cat):
+                cat = "UNCLASSIFIED_SOIL_TYPE"
+            else:
+                cat = cat
+
+            key = f"{cat}"
+            
+            split_dfs[key] = group_df.reset_index(drop=True)
+
+
+    if ("soil_type" not in sort_columns) and ("spt_n_grouping" in sort_columns):
+        for cat, group_df in df.groupby(['spt_n_grouping'], dropna=False):
+
+            if pd.isna(cat):
+                cat = "UNCLASSIFIED_SPT_GROUP"
+            else:
+                cat = cat
+
+            key = f"{cat}"
+            
+            split_dfs[key] = group_df.reset_index(drop=True)
+
+    
+    if "spt_n_grouping" in sort_columns and "soil_type" in sort_columns:
+        for (cat1,cat2), group_df in df.groupby(['spt_n_grouping','soil_type'], dropna=False):
+
+            if pd.isna(cat1):
+                cat1 = "UNCLASSIFIED_SPT_GROUP"
+            else:
+                cat1 = cat1
+
+            if pd.isna(cat2):
+                cat2 = "UNCLASSIFIED_SOIL_TYPE"
+            else:
+                cat2 = cat2
+                
+
+            key = f"{cat1}_{cat2}"
+            
+            split_dfs[key] = group_df.reset_index(drop=True)
+
+    
+    # Create a BytesIO stream to save the Excel file
+    output = io.BytesIO()
+
+
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        for key, df in split_dfs.items():
+            clean_name = str(key)[:31].replace('/', '_').replace('\\', '_')
+            df.to_excel(writer, sheet_name=clean_name, index=False)
+
+    output.seek(0)
+     
+    return output
 
 
 @st.cache_data
@@ -362,13 +435,13 @@ if "final_merged_view_df" in st.session_state:
                 st.dataframe(st.session_state["final_merged_view_df"])
 
 
-                csv = convert_for_download(st.session_state["final_merged_view_df"])
+                excel_file = convert_for_download(st.session_state["final_merged_view_df"],sort_columns)
 
                 st.download_button(
                         label="Download Processed AGS Data",
-                        data=csv,
-                        file_name="data.csv",
-                    mime="text/csv",
+                        data=excel_file,
+                        file_name="ags_processed_data.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     icon=":material/download:",
                 )
 

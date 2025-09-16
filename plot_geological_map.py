@@ -13,8 +13,8 @@ def display_geological_map_with_boreholes(
     bounds=[[1.495116146,103.578843117], [1.114003920, 104.113838259]],
     map_center=[1.35, 103.82],
     zoom_start=17,
-    map_width=1300,
-    map_height=1000,
+    map_width=900,
+    map_height=800,
     checkbox_default=False
 ):
     # Remove duplicates 
@@ -27,9 +27,10 @@ def display_geological_map_with_boreholes(
     # Get local IP address for tile serving
     hostname = socket.gethostname()
     ip_add = socket.gethostbyname(hostname)
+    url = "http://" + ip_add + ":8000"
 
 
-    # find the centeroid
+    # find the centeroidz
     lats = [float(bh["lat"]) for bh in boreholes]
     lons = [float(bh["lon"]) for bh in boreholes]
     central_lat = sum(lats) / len(lats)
@@ -39,11 +40,11 @@ def display_geological_map_with_boreholes(
     m = folium.Map(location=map_center, zoom_start=zoom_start, tiles="OpenStreetMap")
     
     tiles_config = ("{z}","{x}","{y}")
-    geology_tile_url = f"http://{ip_add}:8080/{tiles_config[0]}/{tiles_config[1]}/{tiles_config[2]}.png"
+    geology_tile_url = f"{url}/{tiles_config[0]}/{tiles_config[1]}/{tiles_config[2]}.png"
     
     geology_tiles = folium.TileLayer(
         tiles=geology_tile_url,
-        attr="Your Geological Data (Source: Your Org)",
+        attr="Singapore Geological Map (2021) (Source: BCA, and British Geological Survey)",
         name="Geological Map (Tiles)",
         overlay=True,
         control=True,

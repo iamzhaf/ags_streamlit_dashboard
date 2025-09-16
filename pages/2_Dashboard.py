@@ -78,7 +78,10 @@ selected_charts = col_1.multiselect("Choose charts to display",options=[v for k,
 
 @st.cache_data
 def extract_relevant_cols(uploaded_file,ext):
-    df = pd.read_csv(uploaded_file)
+    if ext == ".csv":
+        df = pd.read_csv(uploaded_file)
+    elif ext == ".xlsx":
+        df = pd.read_excel(uploaded_file)
     df = create_lat_long(df)
     return df
 
@@ -100,44 +103,74 @@ if "dashboard_date_today" not in st.session_state:
     date_today = dt.datetime.today().date()
     st.session_state["dashboard_date_today"] = date_today.strftime("%Y%m%d")
 
+
+if dashboard_uploaded_file is None and "final_merged_view_df" in st.session_state:
+
+    file_name = "final_merged_view_df"
+    
+    df = st.session_state["final_merged_view_df"]
+
+    df = create_lat_long(df)
+
+    st.session_state["boreholes_coor_df"] = create_boreholes_coor_df(df)
+
+    st.session_state["df"] = df    
+
+    col_2.success(f"Data loaded successfully ✅")
+
+    st.session_state["project_title"] = df["project"].unique()[0]
+    st.session_state["total_borehole"] = df["bh_no"].nunique()
+    st.session_state["client_name"] = df["client"].unique()[0]
+
+
+
 # Detect file name change or first upload
 if dashboard_uploaded_file:
 
     # Check if we already have a file and if it's the same
     prev_file_dashboard = st.session_state.get("dashboard_file") # if dashboard_file key is none existent, then None is return
+    
     new_file_uploaded = (
         prev_file_dashboard is None or dashboard_uploaded_file.name != prev_file_dashboard.name
     )
+
+    st.write(new_file_uploaded)
 
     if new_file_uploaded:
 
         st.session_state["dashboard_file"] = dashboard_uploaded_file
 
-        file_name = dashboard_uploaded_file.name.lower()
-
         try:
-
+                
+            file_name = dashboard_uploaded_file.name.lower()
+            
             if file_name.endswith(".csv") or file_name.endswith(".xlsx"):
-                df = extract_relevant_cols(dashboard_uploaded_file, ".csv")
+                root,ext = os.path.splitext(file_name)
+                df = extract_relevant_cols(dashboard_uploaded_file, ext)
                 st.session_state["df"] = df     
                 st.session_state["boreholes_coor_df"] = create_boreholes_coor_df(df)
 
             else:
                 col_2.error("Unsupported file format. Please upload a CSV or Excel file.")
                 df = None
+                st.session_state["df"] = None
+                st.session_state["boreholes_coor_df"] = None
+                
+            col_2.success(f"Data loaded successfully ✅")
 
-            col_2.write(df)
 
             if df is not None:
                 st.session_state["project_title"] = df["project"].unique()[0]
                 st.session_state["total_borehole"] = df["bh_no"].nunique()
                 st.session_state["client_name"] = df["client"].unique()[0]
 
-
-            col_2.success(f"{dashboard_uploaded_file.name} loaded successfully ✅")
-
         except Exception as e:
-            col_2.error(f"❌ Failed to load file {dashboard_uploaded_file.name}")
+            if file_name != "final_merged_view_df":
+                col_2.error(f"❌ Failed to load file {dashboard_uploaded_file.name}")
+            
+            if file_name == "final_merged_view_df":
+                col_2.error(f"❌ Failed to load file {dashboard_uploaded_file}")
+            
             df = None
 
     else:
@@ -229,7 +262,8 @@ if "boreholes_coor_df" in st.session_state:  # make sure df exists
         col_2.subheader("Borehole Location Map (Black Circles = Borehole Point)" )
         try:
             with col_2.container():
-                display_geological_map_with_boreholes(st.session_state["boreholes_coor_df"])
+                borehole_map = display_geological_map_with_boreholes(st.session_state["boreholes_coor_df"])
+                borehole_map
         except Exception as e:
             col_2.error(f"Error plotting Borehole Location Map: {e}")
 
@@ -277,20 +311,32 @@ if "df" in locals():  # make sure df exists
         st.markdown("### Custom Scatter Plot")
         st.write("Select columns from the consolidated data to plot against each other. Only numeric columns will be plotted.")
 
+
+        
+
         # Get numeric columns for user selection
-        numeric_cols = filtered_df.select_dtypes(include=np.number).columns.tolist()
-        all_cols = filtered_df.columns.tolist()
+        if "filtered_df" in locals():
+            custom_dfs = filtered_df.copy()
+            
+            # Try to convert object to numerical
+            custom_dfs[custom_dfs.select_dtypes(include="object").columns.tolist()] = custom_dfs.select_dtypes(include="object").apply(pd.to_numeric, errors='coerce') 
+
+            numeric_cols_1 = custom_dfs.dropna(axis=1, how="all").columns.tolist()
+
+            numeric_cols_2 = custom_dfs.select_dtypes(include=np.number).columns.tolist()
+
+            all_cols = numeric_cols_1 + numeric_cols_2
 
         sub_col1, sub_col2, sub_col3 = st.columns(3)
         with sub_col1:
-            x_axis = st.selectbox("Select X-Axis", options=numeric_cols, index=None, placeholder="Choose a column")
+            x_axis = st.selectbox("Select X-Axis", options=all_cols, index=None, placeholder="Choose a column")
         with sub_col2:
-            y_axis = st.selectbox("Select Y-Axis", options=numeric_cols, index=None, placeholder="Choose a column")
+            y_axis = st.selectbox("Select Y-Axis", options=all_cols, index=None, placeholder="Choose a column")
         with sub_col3:
             color_axis = st.selectbox("Select Color Category (Optional)", options=[None] + all_cols, index=0)
 
         if x_axis and y_axis:
-            st.write(filtered_df.head())
+            # st.write(filtered_df.head())
             custom_plot_fig = plot_custom_scatter_plotly(filtered_df, x_col=x_axis, y_col=y_axis, color_col=color_axis)
             col_2.plotly_chart(custom_plot_fig,use_container_width=False)
         else:

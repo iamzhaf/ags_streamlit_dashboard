@@ -434,27 +434,39 @@ class AGSSgTransformer(BaseTransformer):
     def _generate_spt_soil_layer_dataframes(self):
 
         for borehole in self.transformed_dfs["HOLE"]["hole_id"].unique():
+
+            # initialize df_spt and df_soil as None
+            df_spt = None
+
+            df_soil = None
+
+            if  borehole in self.transformed_dfs["ISPT"]["hole_id"].unique():
             
-            df_spt = self.transformed_dfs["ISPT"][self.transformed_dfs["ISPT"]["hole_id"] == borehole]
-            
-            df_soil = self.transformed_dfs["GEOL"][self.transformed_dfs["GEOL"]["hole_id"] == borehole]
+                df_spt = self.transformed_dfs["ISPT"][self.transformed_dfs["ISPT"]["hole_id"] == borehole]
 
-            df_spt = self._process_spt_df(df_spt)
+                df_spt = self._process_spt_df(df_spt)
 
-            df_soil = self._process_soil_df(df_soil)
+            if borehole in self.transformed_dfs["GEOL"]["hole_id"].unique():
 
-            mapped_spt_soil_df = map_soil_layer_to_spt(df_soil,df_spt,spt_depth_col="spt_depth_to_top_of_test")
+                df_soil = self.transformed_dfs["GEOL"][self.transformed_dfs["GEOL"]["hole_id"] == borehole]
 
-            mapped_spt_soil_df.insert(0,"hole_id",borehole)
+                df_soil = self._process_soil_df(df_soil)
 
-            # combined = pd.merge(df_spt,
-            #                         mapped_spt_soil_df.loc[:,["spt_no","soil_layer","soil_type","soil_description","soil_layer_start_depth_m","soil_layer_end_depth_m"]],
-            #                         on="spt_no",how="left")
+            if isinstance(df_spt,pd.DataFrame) and isinstance(df_soil,pd.DataFrame):
 
-            # st.write("Joinig SPT with Stratum for {}".format(borehole))
-            combined = pd.merge(df_soil,mapped_spt_soil_df.loc[:,["stratum_id","spt_no"]],on="stratum_id",how="left")
-            combined = pd.merge(combined,df_spt.drop(columns=["hole_id"]),on="spt_no",how="left")
-            # st.write(combined)
+                mapped_spt_soil_df = map_soil_layer_to_spt(df_soil,df_spt,spt_depth_col="spt_depth_to_top_of_test")
+
+                mapped_spt_soil_df.insert(0,"hole_id",borehole)
+
+                combined = pd.merge(df_soil,mapped_spt_soil_df.loc[:,["stratum_id","spt_no"]],on="stratum_id",how="left")
+                
+                # append spt columns
+                combined = pd.merge(combined,df_spt.drop(columns=["hole_id"]),on="spt_no",how="left")
+
+            else:
+
+                combined = df_soil
+
             self.boreholes_df[borehole] = combined
 
 
@@ -724,9 +736,26 @@ class AGSSgTransformer(BaseTransformer):
         df["sample_elevation_level"] = df["g_elevation_m"].astype("float") - df["samp_top"].astype("float")
         return df
 
+
+    def _add_real_elevation_level_core(self,df):
+        df["core_elevation_level"] = df["g_elevation_m"].astype("float") - df["core_top"].astype("float")
+        return df
+
+    def _concat_hole_id_with_sample_ref_no(self,df):
+        df["sample_ref_no"] = df["hole_id"] + "_" + df["sample_ref_no"]
+        return df
+
     def _process_final_view(self,df):
 
-        steps = [self._add_project_details,self._final_view_columns_mapping,self._add_real_elevation_level_spt,self._add_real_elevation_level_specimen]
+        steps = [
+                    self._add_project_details,
+                    self._concat_hole_id_with_sample_ref_no,
+                    self._final_view_columns_mapping,
+                    self._add_real_elevation_level_spt,
+                    self._add_real_elevation_level_specimen,
+                    self._add_real_elevation_level_core,
+                    self._add_real_elevation_level_core
+                ]
 
         return self._apply_pipeline(df,steps)
 
@@ -857,7 +886,6 @@ class AGSSgTransformer(BaseTransformer):
 
     def _generate_sample_soil_layer_dataframes(self):
 
-        st.write(self.transformed_dfs["SAMP"])
 
         for borehole in self.transformed_dfs["HOLE"]["hole_id"].unique():
 
@@ -880,13 +908,11 @@ class AGSSgTransformer(BaseTransformer):
                                                             sample_depth_col="depth_m"
                                                             )
 
-            self.soil_layer_samples[borehole] = mapped_sample_stratum   
+            self.soil_layer_samples[borehole] = mapped_sample_stratum  
 
-            # st.write("Sample Stratum for borehole {}".format(borehole))
-            # st.write(self.soil_layer_samples[borehole])
-
-            # st.write("Mapped Sample to Stratum {}".format(borehole))
-            # st.write(mapped_sample_stratum)
+            st.write("Sample -Soil Layer/Strata Mapped for borehole: {}".format(borehole))
+            st.write(mapped_sample_stratum)
+            
 
 
     def _join_layer_spt_with_sample_spt(self):
@@ -894,6 +920,7 @@ class AGSSgTransformer(BaseTransformer):
         for borehole in self.transformed_dfs["HOLE"]["hole_id"].unique():
 
             df_borehole = self.boreholes_df[borehole]
+
 
             if self.sample_spts[borehole] is None:
                 continue
@@ -911,6 +938,7 @@ class AGSSgTransformer(BaseTransformer):
                                     )
 
             self.boreholes_df[borehole] = df_borehole
+
 
             # st.write("Joined borehole SPT with Sample SPT")
             # st.write(self.boreholes_df[borehole])
@@ -973,6 +1001,12 @@ class AGSSgTransformer(BaseTransformer):
 
             df_layer_spts = self.boreholes_df[borehole]
 
+            # get startum ids with sample but no spt
+            stratum_ids = df_layer_samples["stratum_id"].unique()
+
+            # drop stratum ids with sample but no spt
+            df_layer_spts = df_layer_spts[~df_layer_spts["stratum_id"].isin(stratum_ids)]
+                
             combined_df = pd.concat([df_layer_spts,df_layer_samples],axis=0)
 
             # join stratum id with geol layer data
@@ -1018,6 +1052,10 @@ class AGSSgTransformer(BaseTransformer):
                 combined_df[col] = combined_df[col].ffill()
 
             self.boreholes_df[borehole] = combined_df
+
+
+            # st.write("Borehole {}".format(borehole))
+            # st.write(self.boreholes_df[borehole])
 
             # sort by stratum top then by 
 
@@ -1084,11 +1122,16 @@ class AGSSgTransformer(BaseTransformer):
 
             core_mapped = core_mapped.rename(columns={"matched_stratum_id":"stratum_id"})
 
-            combined_df = pd.merge(self.boreholes_df[borehole],core_mapped.loc[:,["stratum_id","core_ref_no"]],on=["stratum_id"],how="left")
+            combined_df = pd.merge(self.boreholes_df[borehole],core_mapped.loc[:,["stratum_id","core_ref_no"]],
+                                on=["stratum_id"],how="left")
 
             cols_to_extract = ["core_ref_no"] + [col for col in core_data.columns if col.startswith("core_") and col not in ["core_ref_no"]]
 
             combined_df = pd.merge(combined_df,core_data[cols_to_extract],on=["core_ref_no"],how="left")
+
+            cols_to_update = [col for col in combined_df.columns if col.startswith("rock_")]
+
+            combined_df.loc[combined_df["samp_top"] != combined_df["core_top"],cols_to_update] = np.nan
 
             self.boreholes_df[borehole] = combined_df
 
@@ -1348,6 +1391,47 @@ class AGSSgTransformer(BaseTransformer):
             # st.write(self.boreholes_df[borehole])
 
 
+    def _add_rebound_binary_col(self,df):
+
+        df = df.copy()
+
+        df["ispt_isrebound"] = df["ispt_npen"].apply(lambda x: 1 if x == 0 else 0)
+
+        return df
+
+
+    def _remove_rebound_spts(self,df):
+
+        # st.write(df[df["ispt_isrebound"] == 1])
+
+        # drop rebouns SPTS. Rebound SPT is defined as SPT with zero penetration
+        df = df[df["ispt_isrebound"] != 1]
+
+        # st.write(df)
+
+        return df
+
+
+    def _ispts_processor_data(self,df):
+
+        steps = [self._add_rebound_binary_col,self._remove_rebound_spts]
+
+        return self._apply_pipeline(df,steps)
+
+        
+    def _transformed_ispt_data(self):
+
+        if "ISPT" in [k for k in self.transformed_dfs.keys()]:
+
+            # st.write("Processing ISPT...")
+            
+            df = self.transformed_dfs["ISPT"].copy()
+            
+            df = self._ispts_processor_data(df)
+
+            self.transformed_dfs["ISPT"] = df
+
+
     def extract_data(self):
 
         self.sections_config= self.config.get("sections")
@@ -1374,6 +1458,9 @@ class AGSSgTransformer(BaseTransformer):
             # st.write(self.transformed_dfs["GEOL"])
 
             # st.write(self.transformed_dfs["SAMP"])
+
+            # process ispt data
+            self._transformed_ispt_data()
 
             # generate spt and soil layer dataframes
             self._generate_spt_soil_layer_dataframes()

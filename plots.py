@@ -1190,23 +1190,23 @@ def plot_custom_scatter_plotly(df, x_col, y_col, color_col=None):
         
     df_plot.dropna(subset=subset_cols, inplace=True)
 
+
     # Remove duplicates
-    df_plot = df_plot.drop_duplicates(subset=[x_col,y_col])
+    df_plot = df_plot.drop_duplicates(subset=[x_col,y_col],keep="first")
+
+    st.write(df_plot[subset_cols])
 
     # Attempt to convert columns to numeric, coercing errors
     df_plot[x_col] = pd.to_numeric(df_plot[x_col], errors='coerce')
     df_plot[y_col] = pd.to_numeric(df_plot[y_col], errors='coerce')
 
-
+    
     # Drop rows that couldn't be converted to numeric in x or y
     df_plot.dropna(subset=[x_col, y_col], inplace=True)
 
 
-    st.write(df_plot)
-
     # Define regex pattern (case-insensitive)
     pattern = re.compile(r'top|depth', re.IGNORECASE)
-
 
 
     # Filter matching columns
@@ -1214,20 +1214,20 @@ def plot_custom_scatter_plotly(df, x_col, y_col, color_col=None):
 
     range_y = None
 
-    # if len(matched_cols) > 0:
+    if len(matched_cols) > 0:
 
-    #     # Essentially sort by depth
-    #     df_plot.sort_values(by=matched_cols[0], inplace=True, ascending=True)
+        # Essentially sort by depth
+        df_plot.sort_values(by=matched_cols[0], inplace=True, ascending=True)
 
-    #     df_plot = df_plot.reset_index(drop=True)
+        df_plot = df_plot.reset_index(drop=True)
 
-    #     st.write(df_plot.tail())
+        # st.write(df_plot.tail())
 
-    #     st.write(df_plot[x_col].max())
+        # st.write(df_plot[x_col].max())
 
-    #     max_depth = df_plot[y_col].max()
+        max_depth = df_plot[y_col].max()
 
-    #     range_y = [max_depth+10,0-0.5]
+        range_y = [max_depth+10,0-0.5]
     
     if df_plot.empty:
         fig = go.Figure()
@@ -1242,7 +1242,6 @@ def plot_custom_scatter_plotly(df, x_col, y_col, color_col=None):
     #     st.write(range_y)
     #     st.write(depth_of_max_x)
 
-    st.write(df_plot.loc[:,[x_col,y_col]])
 
     fig = px.scatter(
         df_plot,
@@ -1252,7 +1251,7 @@ def plot_custom_scatter_plotly(df, x_col, y_col, color_col=None):
         title=title,
         hover_data=hover_data,
         color_discrete_sequence=px.colors.qualitative.Set1,
-        symbol="spt_n_grouping",
+        # symbol="spt_n_grouping",
         # mode="markers+text"
     )
 

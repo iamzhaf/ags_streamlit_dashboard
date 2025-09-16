@@ -641,7 +641,7 @@ def parse_triaxial_row(test_str, c_str, phi_str,verbose=False):
 
 
 
-def map_sample_to_stratum(sample_df, borehole_with_stratum, sample_depth_col="depth_m", stratum_id_col="stratum_id", stratum_top_col="stratum_top", stratum_base_col="stratum_base",tolerance=0.01, verbose=False):
+def map_sample_to_stratum(sample_df, borehole_with_stratum, sample_depth_col="depth_m", stratum_id_col="stratum_id", stratum_top_col="stratum_top", stratum_base_col="stratum_base",tolerance=0.00, verbose=False):
     """
     Maps each sample to its corresponding stratum layer based on depth.
 

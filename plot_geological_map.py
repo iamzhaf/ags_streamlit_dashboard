@@ -8,6 +8,8 @@ from PIL import Image
 import socket
 import streamlit as st
 
+# Load Geological Map
+
 def display_geological_map_with_boreholes(
     boreholes_coor_df,
     bounds=[[1.495116146,103.578843117], [1.114003920, 104.113838259]],
